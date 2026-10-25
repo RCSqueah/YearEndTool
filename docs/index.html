@@ -307,7 +307,8 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
             <button type="button" data-timemode="pct">Business time %</button>
           </div>
         </div>
-        <label class="field" data-show-time="hours"><span>Hours a week working from home</span><input class="num" id="f-hours" data-bind="uoh.hours" inputmode="decimal"><span class="hint">Counted as days of 10 hours, out of 7</span></label>
+        <label class="field" data-show-time="hours"><span>Hours a week working from home</span><input class="num" id="f-hours" data-bind="uoh.hours" inputmode="decimal"><span class="hint" data-out="hoursHint"></span></label>
+        <label class="field" data-show-time="hours"><span>Hours in a working day</span><input class="num" id="f-dayhours" data-bind="uoh.dayHours" inputmode="decimal"><span class="hint">Hours a week ÷ this = business days, out of 7</span></label>
         <label class="field" data-show-time="days"><span>Business days a week</span><input class="num" id="f-days" data-bind="uoh.days" inputmode="decimal"><span class="hint">Out of 7 days</span></label>
         <label class="field" data-show-time="pct"><span>Business time %</span><input class="num" id="f-timepct" data-bind="uoh.timePct" inputmode="decimal"></label>
         <p class="hint field-wide muted small" data-out="timePrior"></p>
@@ -572,7 +573,7 @@ function blankState() {
     profit: { turnover: '', otherIncome: '', expenses: '', netOverride: '', adjustments: '', prior: {} },
     journal: { uohCode: '300', clearCode: '990', date: '', taxRate: 'No VAT' },
     uoh: {
-      method: 'actual', lines: [], totalRooms: '', workRooms: '', timeMode: 'hours', hours: '', days: '', timePct: '',
+      method: 'actual', lines: [], totalRooms: '', workRooms: '', timeMode: 'hours', hours: '', dayHours: '7.5', days: '', timePct: '',
       shared: false, sharedPct: '50', flatHours: '', flatMonths: '12', notes: '',
       prior: { total: null, notes: '', rooms: '', workRooms: '', timePct: null, method: '' },
     },
@@ -613,6 +614,7 @@ function migrate(data) {
   });
   if (has(st.profit.before) && !has(st.profit.turnover)) st.profit.turnover = st.profit.before;
   delete st.profit.before;
+  if (!has(st.uoh.dayHours)) st.uoh.dayHours = '7.5';
   if (!st.uoh.timeMode) st.uoh.timeMode = has(st.uoh.hours) ? 'hours' : has(st.uoh.timePct) ? 'pct' : 'hours';
   st.ca.pools.forEach(pl => { if (!pl.kind) pl.kind = 'car'; });
   st.v = 2;
@@ -681,9 +683,10 @@ function calcUoh(st = S) {
   let timeFrac = 1, timeText = 'No time split entered';
   const mode = u.timeMode || 'hours';
   if (mode === 'hours' && has(u.hours)) {
-    const days = Math.min(num(u.hours) / 10, 7);
+    const dayHours = num(u.dayHours) > 0 ? num(u.dayHours) : 7.5;
+    const days = Math.min(num(u.hours) / dayHours, 7);
     timeFrac = days / 7;
-    timeText = `${num(u.hours)} hours a week = ${r2(days)} days of 10 hours, out of 7`;
+    timeText = `${num(u.hours)} hours a week = ${r2(days)} days of ${dayHours} hours, out of 7`;
   } else if (mode === 'days' && has(u.days)) {
     timeFrac = Math.min(Math.max(num(u.days), 0), 7) / 7;
     timeText = `${num(u.days)} business days a week, out of 7`;
@@ -1170,6 +1173,8 @@ function refresh() {
   out('uohTotal', fmt(uoh.total));
   const priorSum = S.uoh.lines.reduce((a, l) => a + (l.prior || 0), 0);
   out('uohTotalPrior', priorSum ? fmt(priorSum) : '');
+  { const dh = num(S.uoh.dayHours) > 0 ? num(S.uoh.dayHours) : 7.5;
+    out('hoursHint', has(S.uoh.hours) ? `${num(S.uoh.hours)} ÷ ${dh} = ${r2(Math.min(num(S.uoh.hours) / dh, 7))} days out of 7` : `Counted as days of ${dh} hours, out of 7`); }
   out('roomsPrior', P.rooms ? `Last year: ${P.workRooms || '?'} of ${P.rooms} rooms` : '');
   out('timePrior', P.timePct != null ? `Last year claimed ${pct(P.timePct)} of the time (${r2(P.timePct * 7)} days a week).` : '');
   const rooms = num(S.uoh.totalRooms), work = num(S.uoh.workRooms);
@@ -1654,9 +1659,9 @@ function importWorkingPapers(name, wb) {
     if (hm) { u.timeMode = 'hours'; u.hours = hm[1]; }
     else if (u.prior.timePct != null) { u.timeMode = 'pct'; u.timePct = String(r2(u.prior.timePct * 100)); }
     if (hm && u.prior.timePct != null) {
-      const intended = Math.min(+hm[1] / 10, 7) / 7;
+      const intended = Math.min(+hm[1] / num(u.dayHours || 7.5), 7) / 7;
       if (Math.abs(intended - u.prior.timePct) > 0.005) {
-        notes.push(['warn', `Use of Home: last year's notes say ${hm[1]} hours a week (${pct(intended)} business), but the papers claimed ${pct(u.prior.timePct)} of the cost. This year uses ${pct(intended)}; check which is right.`]);
+        notes.push(['warn', `Use of Home: last year's notes say ${hm[1]} hours a week, which at ${num(u.dayHours || 7.5)}-hour days is ${pct(intended)} business,, but the papers claimed ${pct(u.prior.timePct)} of the cost. This year uses ${pct(intended)}; check which is right.`]);
       }
     }
     notes.push(['ok', `Use of Home: ${u.lines.length} item${u.lines.length !== 1 ? 's' : ''} brought forward, last year's claim ${u.prior.total != null ? fmt(u.prior.total) : 'not found'}.`]);
@@ -1816,7 +1821,7 @@ function rollForward(last) {
   // Use of Home: same items and splits; this year's amounts start empty.
   const u = n.uoh, lu = last.uoh;
   u.lines = lu.lines.map(l => ({ desc: l.desc, note: l.note, expr: '', prior: r2(lineAmount(l)), priorExpr: isSum(l.expr) ? l.expr : '', imp: {} }));
-  Object.assign(u, { method: lu.method, totalRooms: lu.totalRooms, workRooms: lu.workRooms, timeMode: lu.timeMode, hours: lu.hours, days: lu.days, timePct: lu.timePct, shared: lu.shared, sharedPct: lu.sharedPct, flatHours: lu.flatHours, flatMonths: lu.flatMonths });
+  Object.assign(u, { method: lu.method, totalRooms: lu.totalRooms, workRooms: lu.workRooms, timeMode: lu.timeMode, hours: lu.hours, dayHours: lu.dayHours, days: lu.days, timePct: lu.timePct, shared: lu.shared, sharedPct: lu.sharedPct, flatHours: lu.flatHours, flatMonths: lu.flatMonths });
   u.prior = { total: r2(C.uoh.claim), notes: lu.notes, rooms: lu.totalRooms, workRooms: lu.workRooms, timePct: C.uoh.timeFrac, method: lu.method };
   // Capital allowances: carried forward becomes brought forward; disposed assets drop out.
   n.ca.mainBf = C.ca.main.cf ? String(C.ca.main.cf) : '';
