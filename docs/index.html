@@ -582,14 +582,19 @@ function blankState() {
     email: { firstName: '', to: '', replyBy: '', includePrior: true, subject: '', text: '', edited: false, off: {} },
   };
 }
-let S = load();
+let S; // loaded at start-up, once every helper below exists
 
 function load() {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (raw) return migrate(JSON.parse(raw));
-  } catch (_) {}
-  return blankState();
+  let raw = null;
+  try { raw = localStorage.getItem(STORE_KEY); } catch (_) {}
+  if (!raw) return blankState();
+  try { return migrate(JSON.parse(raw)); }
+  catch (e) {
+    // Keep a copy rather than saving a blank client over it.
+    console.error('Could not read the saved workings', e);
+    try { localStorage.setItem(STORE_KEY + ':unreadable', raw); } catch (_) {}
+    return blankState();
+  }
 }
 // Brings older saved workings up to the current layout.
 function migrate(data) {
@@ -1290,6 +1295,10 @@ function itemName(it, generic) {
   return m ? m[1] : '';
 }
 
+// Sections left out unless ticked (payments can be seen in the HMRC agent account).
+const EMAIL_DEFAULT_OFF = ['payments'];
+const isOff = key => (key in S.email.off ? S.email.off[key] : EMAIL_DEFAULT_OFF.includes(key));
+
 // Each section is a list (a heading line, one bullet per item, a closing
 // line) and/or separate questions. Every item and question has its own tick
 // box, keyed "section:id", as well as the section's own.
@@ -1385,10 +1394,10 @@ function emailSections() {
 
 // The lines of one section, leaving out anything unticked.
 function sectionLines(x) {
-  const off = S.email.off, lines = [];
-  const list = x.list.filter(l => !off[`${x.key}:${l.id}`]);
+  const lines = [];
+  const list = x.list.filter(l => !isOff(`${x.key}:${l.id}`));
   if (list.length) lines.push(x.intro, ...list.map(l => l.line), ...(x.after ? [x.after] : []));
-  x.asks.filter(a => !off[`${x.key}:${a.id}`]).forEach(a => lines.push(...a.lines));
+  x.asks.filter(a => !isOff(`${x.key}:${a.id}`)).forEach(a => lines.push(...a.lines));
   return lines;
 }
 
@@ -1397,7 +1406,7 @@ function composeEmail() {
   const first = (e.firstName || String(st.client.name || '').trim().split(/\s+/)[0] || '').trim();
   const ty = st.client.taxYear, ey = yearEnd(ty) + 1;
   const ip = e.includePrior !== false;
-  const secs = emailSections().filter(x => !e.off[x.key]).map(x => ({ title: x.title, lines: sectionLines(x) })).filter(x => x.lines.length);
+  const secs = emailSections().filter(x => !isOff(x.key)).map(x => ({ title: x.title, lines: sectionLines(x) })).filter(x => x.lines.length);
   const body = [
     `Dear ${first || 'Sir or Madam'},`,
     '',
@@ -1420,9 +1429,9 @@ function renderEmail() {
   const box = (key, title, sub, on, child) => `<label class="check${child ? ' sub' : ''}"><input type="checkbox" data-email-sec="${esc(key)}" ${on ? 'checked' : ''}>
     <span><b>${esc(title)}</b>${sub ? `<br><span class="muted small">${esc(sub)}</span>` : ''}</span></label>`;
   $('#emailSections').innerHTML = emailSections().map(x => {
-    const on = !e.off[x.key];
+    const on = !isOff(x.key);
     const parts = [...x.list, ...x.asks];
-    const subs = parts.length > 1 ? `<div class="sec-items"${on ? '' : ' hidden'}>${parts.map(p => box(`${x.key}:${p.id}`, p.label, p.sub, !e.off[`${x.key}:${p.id}`], true)).join('')}</div>` : '';
+    const subs = parts.length > 1 ? `<div class="sec-items"${on ? '' : ' hidden'}>${parts.map(p => box(`${x.key}:${p.id}`, p.label, p.sub, !isOff(`${x.key}:${p.id}`), true)).join('')}</div>` : '';
     return `<div class="sec-group">${box(x.key, x.title, x.summary, on)}${subs}</div>`;
   }).join('');
   if (!e.edited) e.text = composeEmail();
@@ -1437,7 +1446,7 @@ function renderEmail() {
 document.addEventListener('change', ev => {
   const k = ev.target.dataset && ev.target.dataset.emailSec;
   if (!k) return;
-  if (ev.target.checked) delete S.email.off[k]; else S.email.off[k] = true;
+  S.email.off[k] = !ev.target.checked;
   renderEmail();
 });
 $('#em-body').addEventListener('input', ev => {
@@ -2216,6 +2225,7 @@ $('#exportBtn').onclick = () => {
 };
 
 // ── Start ──────────────────────────────────────────────────────────────────
+S = load();
 renderLists();
 renderRates();
 refresh();
