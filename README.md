@@ -19,10 +19,13 @@ It is a single web page with no server, hosted free on **GitHub Pages**, like th
   - **Extraction Tool Bank Statement or Bills CSV**. Lines coded to the Use of Home account are grouped into Rent, Council tax, Water, Gas and electricity and so on, and matched to last year's items. Dropping the same file in twice replaces its figures rather than doubling them.
   - **Xero Account Transactions export**. Reads the Use of Home account by name, and a "1 of 3 rooms" adjustment journal for the work space split.
   - **Extraction Tool backup** (.json). Finds this client's Use of Home account code.
-- **Use of Home**: running costs, work space by rooms, time by hours a week (days of 10 hours out of 7) or a %, and an optional partner's share. The HMRC flat rate (£10/£18/£26 a month) is shown alongside, and you choose which method to claim. Amounts accept sums like `127.23*12`.
-- **Capital allowances**: main pool (18%, AIA, small pools allowance), special rate pool (6%), and single-asset pools for cars with private use (18% or 6%, 100% FYA for new zero-emission cars, disposals with balancing allowances or charges).
-- **Tax**: taxable trading profit, other income, pension and Gift Aid relief, student loan, the High Income Child Benefit Charge, Class 4 NI, payments on account and the 31 January payment. Uses 2025/26 and 2024/25 rates for England, Wales and Northern Ireland.
-- **Export**: one Excel workbook with Summary, Use of Home, CA and Tax sheets. The full workings are kept in a hidden sheet, so next year you drop the file back in to roll forward.
+- **Tax year rates**: on the Client tab. Built in for 2024/25, 2025/26 and 2026/27. Any figure can be edited, and **Add next year's rates** copies the latest year so you only change what HMRC changed. Edits are saved in the browser and travel inside each export. The tax year follows the period end date.
+- **Use of Home**: running costs, work space by rooms, time by hours a week, business days a week or a %, and an optional partner's share. The HMRC flat rate is shown alongside, and you choose which method to claim. Amounts accept sums like `127.23*12`.
+- **Capital allowances**: main pool (18%, AIA, small pools allowance), special rate pool (6%), and single-asset pools for vehicles and equipment with private use. A car can take 18%, 6% or the 100% first-year allowance; a van or equipment can take AIA. Disposals give balancing allowances or charges. Last year's calculation is shown underneath.
+- **Tax**: laid out as the return asks for it. Self-employment (SA103), employments (SA102), interest and dividends by account, pensions, UK property (SA105), other income, pension contributions and Gift Aid by charity. Every section takes as many lines as needed, each with its own notes and last year's figure. The tab also covers student loan, the High Income Child Benefit Charge, Class 4 NI and payments on account.
+- **Tax return**: the figures to enter, by page and box number.
+- **Removed lines**: removing a line shows an Undo button, and recently removed lines can be restored from the list under each table.
+- **Export**: one Excel workbook with Summary, Use of Home, CA, Tax and Tax return sheets. The full workings are kept in a hidden sheet, so next year you drop the file back in to roll forward.
 
 Work in progress is saved in the browser as you type. The exported workbook is the copy to keep with the client's file.
 
@@ -32,9 +35,9 @@ Work in progress is saved in the browser as you type. The exported workbook is t
 2. Under **Build and deployment**, set Source to **Deploy from a branch**, Branch to **`main`**, and Folder to **`/docs`**. Click **Save**.
 3. After a minute or two the page shows the address, e.g. `https://rcsqueah.github.io/YearEndTool/`.
 
-## Adding a new tax year's rates
+## A new tax year
 
-Rates live in the `RATES` table near the top of the script in `docs/index.html`. Copy the latest year, change the figures that changed (e.g. Child Benefit, student loan thresholds), and the new year appears in the Tax year list.
+Open **Client & import → Tax year rates** and click **Add next year's rates**. Change the figures HMRC has changed (e.g. Child Benefit, student loan thresholds) and they're saved in the browser. To build a year into the tool for everyone, add it to `BUILTIN_RATES` in `docs/index.html`.
 
 | File | What it does |
 |---|---|
