@@ -188,23 +188,13 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     <div class="fields">
       <label class="field"><span>Client name</span><input id="f-name" data-bind="client.name"></label>
       <label class="field"><span>Period start</span><input id="f-start" type="date" data-bind="client.start"></label>
-      <label class="field"><span>Period end</span><input id="f-end" type="date" data-bind="client.end" data-after="periodEnd"><span class="hint">Sets the tax year</span></label>
+      <label class="field"><span>Period end</span><input id="f-end" type="date" data-bind="client.end" data-after="periodEnd"></label>
       <label class="field"><span>Tax year</span><select id="f-year" data-bind="client.taxYear"></select><span class="hint" data-out="yearHint"></span></label>
       <label class="field"><span>Basis</span>
         <select id="f-basis" data-bind="client.basis"><option>Cash basis</option><option>Accruals basis</option></select></label>
     </div>
   </section>
 
-  <section class="panel">
-    <details class="rates" id="ratesBox">
-      <summary>Tax year rates <span class="muted small" data-out="ratesSummary"></span></summary>
-      <div style="display:grid;gap:14px;margin-top:14px;">
-        <p class="muted small">The figures used for the selected tax year. Change any that HMRC updates. Your changes are saved in this browser and go into each export. Rates are for England, Wales and Northern Ireland.</p>
-        <div class="row-actions" id="ratesActions"></div>
-        <div id="ratesFields" style="display:grid;gap:14px;"></div>
-      </div>
-    </details>
-  </section>
 
   <section class="panel">
     <div class="panel-head"><h2>Bring in last year and this year's figures</h2></div>
@@ -481,6 +471,16 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     </div>
     <div class="table-wrap"><table><thead><tr><th>Date</th><th>Account</th><th>Description</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead><tbody id="journalTable"></tbody></table></div>
     <div class="row-actions"><button class="btn primary" type="button" id="journalBtn">↓ Download Xero journal CSV</button><span class="muted small" data-out="journalName"></span></div>
+  </section>
+  <section class="panel" style="margin-top:18px;">
+    <details class="rates" id="ratesBox">
+      <summary>Tax rates <span class="muted small" data-out="ratesSummary"></span></summary>
+      <div style="display:grid;gap:14px;margin-top:14px;">
+        <p class="muted small">The rates and allowances the tool uses for this tax year, for England, Wales and Northern Ireland. They are built in and checked against HMRC each year, so you only need this if HMRC changes something mid-year or a year isn't built in yet. Changes are saved in this browser and go into each export.</p>
+        <div class="row-actions" id="ratesActions"></div>
+        <div id="ratesFields" style="display:grid;gap:14px;"></div>
+      </div>
+    </details>
   </section>
 </div>
 
@@ -1143,7 +1143,7 @@ function refresh() {
 
   $('#hdrClient').textContent = S.client.name || 'No client loaded';
   $('#hdrYear').textContent = `${S.client.taxYear} · ${S.client.basis}`;
-  out('yearHint', hasRates(S.client.taxYear) ? `Accounts to ${S.client.end ? new Date(S.client.end).toLocaleDateString('en-GB') : '?'}` : `<span class="chip warn">No ${esc(S.client.taxYear)} rates yet</span>`);
+  out('yearHint', hasRates(S.client.taxYear) ? `Set from the period end. ${esc(S.client.taxYear)} rates are built in.` : `<span class="chip warn">No ${esc(S.client.taxYear)} rates yet</span> Add them under Tax rates on the Export tab.`);
 
   // Summary strip
   out('sumUoh', fmt0(uoh.figure));
@@ -1466,7 +1466,7 @@ function renderRates() {
   if (!hasRates(year)) actions.push(`<button class="btn primary" type="button" id="rateAddYear">Add ${esc(year)} rates, copied from ${esc(latestYear())}</button>`);
   if (custom && builtin) actions.push(`<button class="btn" type="button" id="rateReset">Go back to the built-in ${esc(year)} rates</button>`);
   if (custom && !builtin) actions.push(`<button class="btn danger" type="button" id="rateDelete">Delete ${esc(year)} rates</button>`);
-  actions.push(`<button class="btn" type="button" id="rateNext">Add ${esc(nextTaxYear(latestYear()))} rates</button>`);
+  if (hasRates(year) || nextTaxYear(latestYear()) !== year) actions.push(`<button class="btn" type="button" id="rateNext">Add ${esc(nextTaxYear(latestYear()))} rates</button>`);
   $('#ratesActions').innerHTML = actions.join('');
   const disabled = hasRates(year) ? '' : 'disabled';
   $('#ratesFields').innerHTML = RATE_FIELDS.map(([group, fields]) => `<div class="fields"><h3>${esc(group)}</h3>${fields.map(([k, label, type]) => {
@@ -1774,7 +1774,7 @@ function importWorkingPapers(name, wb) {
   S = fresh;
   notes.reverse().forEach(([c, m]) => logMsg(c, m));
   logMsg('ok', `${name}: last year's working papers for ${S.client.name || 'the client'} loaded. This year set to ${S.client.taxYear}.`);
-  if (!hasRates(S.client.taxYear)) logMsg('warn', `There are no ${S.client.taxYear} rates yet. Add them under Tax year rates.`);
+  if (!hasRates(S.client.taxYear)) logMsg('warn', `There are no ${S.client.taxYear} rates built in yet. Add them under Tax rates on the Export tab.`);
   toast("Last year's working papers loaded.");
 }
 
@@ -1794,7 +1794,7 @@ function importOwnExport(name, wb) {
   }
   S = rollForward(last);
   logMsg('ok', `${name}: rolled ${last.client.taxYear} forward to ${S.client.taxYear}. Last year's figures are now the comparatives.`);
-  if (!hasRates(S.client.taxYear)) logMsg('warn', `There are no ${S.client.taxYear} rates yet. Add them under Tax year rates.`);
+  if (!hasRates(S.client.taxYear)) logMsg('warn', `There are no ${S.client.taxYear} rates built in yet. Add them under Tax rates on the Export tab.`);
   toast('Rolled forward from last year.');
 }
 

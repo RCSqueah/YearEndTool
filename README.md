@@ -19,7 +19,8 @@ It is a single web page with no server, hosted free on **GitHub Pages**, like th
   - **Extraction Tool Bank Statement or Bills CSV**. Lines coded to the Use of Home account are grouped into Rent, Council tax, Water, Gas and electricity and so on, and matched to last year's items. Dropping the same file in twice replaces its figures rather than doubling them.
   - **Xero Account Transactions export**. Reads the Use of Home account by name, and a "1 of 3 rooms" adjustment journal for the work space split.
   - **Extraction Tool backup** (.json). Finds this client's Use of Home account code.
-- **Tax year rates**: on the Client tab. Built in for 2024/25, 2025/26 and 2026/27. Any figure can be edited, and **Add next year's rates** copies the latest year so you only change what HMRC changed. Edits are saved in the browser and travel inside each export. The tax year follows the period end date.
+- **Tax year**: set from the period end date. Importing last year's working papers sets this year's period to the twelve months after last year's, and rolling an export forward moves it on a year. Change the period end on the Client tab and the tax year follows.
+- **Tax rates**: built in for 2024/25, 2025/26 and 2026/27 (England, Wales and Northern Ireland), so nothing needs entering. They can be viewed or changed under Tax rates at the bottom of the Export tab, which is also where a year that isn't built in yet can be added.
 - **Client email**: writes the year's information request from last year's workings. It names each household bill, vehicle, bank, investment, pension, property and charity, with last year's figures if you want them, and ends with a general question about other income and changes. Untick anything you don't need, edit the wording, then copy it or open it in your email app.
 - **Use of Home**: running costs, work space by rooms, time by hours a week, business days a week or a %, and an optional partner's share. The HMRC flat rate is shown alongside, and you choose which method to claim. Amounts accept sums like `127.23*12`.
 - **Capital allowances**: main pool (18%, AIA, small pools allowance), special rate pool (6%), and single-asset pools for vehicles and equipment with private use. A car can take 18%, 6% or the 100% first-year allowance; a van or equipment can take AIA. Disposals give balancing allowances or charges. Last year's calculation is shown underneath.
@@ -40,7 +41,7 @@ Work in progress is saved in the browser as you type. The exported workbook is t
 
 ## A new tax year
 
-Open **Client & import → Tax year rates** and click **Add next year's rates**. Change the figures HMRC has changed (e.g. Child Benefit, student loan thresholds) and they're saved in the browser. To build a year into the tool for everyone, add it to `BUILTIN_RATES` in `docs/index.html`.
+Open **Export → Tax rates** and click **Add next year's rates**. Change the figures HMRC has changed (e.g. Child Benefit, student loan thresholds) and they're saved in the browser. To build a year into the tool for everyone, add it to `BUILTIN_RATES` in `docs/index.html`.
 
 | File | What it does |
 |---|---|
