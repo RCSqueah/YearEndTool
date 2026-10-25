@@ -1,0 +1,1350 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Year End Workings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one working column of ledger panels under a sticky summary strip; tabs follow the order of the working papers. */
+:root {
+  --paper: #f6f7f5;
+  --sheet: #ffffff;
+  --ink: #1c2626;
+  --muted: #5d6b69;
+  --rule: #d5dcd9;
+  --accent: #0e6a62;
+  --accent-soft: #e2f0ed;
+  --warn: #9a5b00;
+  --warn-soft: #fbf0dc;
+  --bad: #a3312b;
+  --good: #2c7a3f;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Public Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #121817; --sheet: #1a2221; --ink: #e3ebe9; --muted: #98a8a5; --rule: #2f3b39;
+    --accent: #5cc2b5; --accent-soft: #1d3632; --warn: #e6a94a; --warn-soft: #3a2d17; --bad: #f08a83; --good: #7fcf8f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #121817; --sheet: #1a2221; --ink: #e3ebe9; --muted: #98a8a5; --rule: #2f3b39;
+  --accent: #5cc2b5; --accent-soft: #1d3632; --warn: #e6a94a; --warn-soft: #3a2d17; --bad: #f08a83; --good: #7fcf8f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.5 var(--font-body); }
+[hidden] { display: none !important; }
+.wrap { max-width: 1060px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { padding-block: 20px 8px; display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline; justify-content: space-between; }
+h1 { font: 700 22px/1.2 var(--font-display); margin: 0; letter-spacing: -0.01em; }
+h1 small { font: 500 13px var(--font-body); color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+h2 { font: 600 17px/1.3 var(--font-display); margin: 0 0 4px; text-wrap: balance; }
+h3 { font: 600 12px/1.3 var(--font-body); margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+
+.strip { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); border-bottom: 1px solid var(--rule); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--paper); }
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; margin-block: 6px 10px; }
+.fig { background: var(--sheet); padding: 8px 12px; min-width: 0; }
+.fig small { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.fig b { font: 600 18px var(--font-display); font-variant-numeric: tabular-nums; }
+.fig .prior { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+nav.tabs { display: flex; gap: 2px; overflow-x: auto; }
+nav.tabs button { font: 600 13px var(--font-body); border: 0; background: none; color: var(--muted); padding: 8px 14px; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
+nav.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+nav.tabs button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+main { padding-block: 18px 60px; display: grid; gap: 18px; }
+main > *, [data-pane] > div > *, section.panel > *, .grid2 > * { min-width: 0; }
+section.panel { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 16px 18px; display: grid; gap: 14px; min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: baseline; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 22px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px 16px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field > span { font-size: 12px; font-weight: 600; color: var(--muted); }
+.field .hint { font-size: 11.5px; color: var(--muted); }
+input, select, textarea { font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 6px 8px; width: 100%; min-width: 0; }
+textarea { min-height: 64px; resize: vertical; }
+input.num { text-align: right; font-variant-numeric: tabular-nums; }
+.check { display: flex; gap: 8px; align-items: center; font-weight: 500; }
+.check input { width: auto; }
+
+.btn { font: 600 13px var(--font-body); border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); border-radius: 4px; padding: 7px 12px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--sheet); }
+.btn.link { border: 0; background: none; color: var(--accent); padding: 2px 4px; }
+.btn.danger { color: var(--bad); }
+.btn input[type=file] { display: none; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.drop { border: 1.5px dashed var(--rule); border-radius: 6px; padding: 18px; text-align: center; display: grid; gap: 8px; justify-items: center; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+
+.table-wrap { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+td.n, th.n { text-align: right; white-space: nowrap; }
+td input { padding: 4px 6px; }
+tr.total td { font-weight: 600; border-top: 1.5px solid var(--ink); border-bottom: 0; }
+tr.sub td { color: var(--muted); }
+tr.key td { font-weight: 700; background: var(--accent-soft); }
+.calc td:first-child { width: 60%; }
+
+.chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.note { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 8px 12px; border-radius: 0 4px 4px 0; font-size: 13px; }
+.note.info { border-left-color: var(--accent); background: var(--accent-soft); }
+.log { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.log li { padding: 6px 10px; border-radius: 4px; background: var(--paper); }
+.log li.warn { background: var(--warn-soft); }
+.log li.ok::before { content: "✓ "; color: var(--good); font-weight: 700; }
+.log li.warn::before { content: "! "; color: var(--warn); font-weight: 700; }
+.prior-text { white-space: pre-wrap; font-size: 12.5px; color: var(--muted); background: var(--paper); border-radius: 4px; padding: 8px 10px; }
+.method { display: flex; gap: 0; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; width: fit-content; }
+.method button { font: 600 13px var(--font-body); border: 0; background: var(--sheet); color: var(--muted); padding: 7px 14px; cursor: pointer; }
+.method button[aria-pressed="true"] { background: var(--accent); color: var(--sheet); }
+.pool { border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; display: grid; gap: 10px; }
+.pool-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.toast { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--paper); padding: 10px 14px; border-radius: 6px; font-size: 13px; max-width: min(420px, calc(100vw - 32px)); z-index: 20; }
+.confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; border: 1px solid var(--bad); border-radius: 4px; }
+@media (max-width: 560px) { .fig b { font-size: 16px; } section.panel { padding: 14px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="strip">
+  <div class="wrap">
+    <header class="top">
+      <h1>Year End Workings <small id="hdrClient">No client loaded</small></h1>
+      <span class="muted small" id="hdrYear"></span>
+    </header>
+    <div class="figures" aria-live="polite">
+      <div class="fig"><small>Use of Home</small><b data-out="sumUoh">£0</b><div class="prior" data-out="sumUohPrior"></div></div>
+      <div class="fig"><small>Capital allowances</small><b data-out="sumCa">£0</b><div class="prior" data-out="sumCaPrior"></div></div>
+      <div class="fig"><small>Taxable profit</small><b data-out="sumProfit">£0</b><div class="prior" data-out="sumProfitPrior"></div></div>
+      <div class="fig"><small>Tax, NI &amp; charges</small><b data-out="sumTax">£0</b><div class="prior" data-out="sumTaxPrior"></div></div>
+      <div class="fig"><small>Due 31 January</small><b data-out="sumJan">£0</b><div class="prior" data-out="sumJanNote"></div></div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="client" aria-selected="true">Client &amp; import</button>
+      <button role="tab" data-tab="uoh">Use of Home</button>
+      <button role="tab" data-tab="ca">Capital allowances</button>
+      <button role="tab" data-tab="tax">Tax</button>
+      <button role="tab" data-tab="export">Export</button>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+<main>
+
+<!-- ───────────── CLIENT & IMPORT ───────────── -->
+<div data-pane="client">
+  <div style="display:grid;gap:18px;">
+  <section class="panel">
+    <div class="panel-head"><h2>Client</h2><span class="muted small">Saved in this browser as you type</span></div>
+    <div class="fields">
+      <label class="field"><span>Client name</span><input id="f-name" data-bind="client.name"></label>
+      <label class="field"><span>Tax year</span>
+        <select id="f-year" data-bind="client.taxYear"></select></label>
+      <label class="field"><span>Period start</span><input id="f-start" type="date" data-bind="client.start"></label>
+      <label class="field"><span>Period end</span><input id="f-end" type="date" data-bind="client.end"></label>
+      <label class="field"><span>Basis</span>
+        <select id="f-basis" data-bind="client.basis"><option>Cash basis</option><option>Accruals basis</option></select></label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Bring in last year and this year's figures</h2></div>
+    <div class="drop" id="drop">
+      <p><b>Drop files here</b> or <label class="btn link">choose files<input type="file" id="fileIn" multiple accept=".xlsx,.xlsm,.xls,.csv,.json"></label></p>
+      <p class="muted small">You can drop several files at once. The tool recognises each one by its contents.</p>
+    </div>
+    <div class="grid2 small">
+      <div>
+        <h3>Last year</h3>
+        <ul class="muted" style="margin:0;padding-left:18px;display:grid;gap:4px;">
+          <li><b>Last year's working papers</b> (.xlsx with Expenses, Tax and CA sheets). Brings forward the Use of Home items, rooms and time split, the car and pool balances, and last year's tax figures as comparatives.</li>
+          <li><b>Last year's export from this tool</b> (.xlsx). Rolls everything forward. If it's the same tax year, it reopens it for editing.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>This year, from the Extraction Tool</h3>
+        <ul class="muted" style="margin:0;padding-left:18px;display:grid;gap:4px;">
+          <li><b>Bank Statement or Bills CSV</b>. Lines coded to the Use of Home account are added to this year's Use of Home costs.</li>
+          <li><b>Xero Account Transactions export</b> (.csv). Reads the Use of Home account by name, plus any "1 of 3 rooms" adjustment.</li>
+          <li><b>Extraction Tool backup</b> (.json). Looks up this client's Use of Home account code.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="fields">
+      <label class="field"><span>Use of Home account code</span><input id="f-uohcode" data-bind="imp.uohCode" placeholder="e.g. 213"><span class="hint">Used for Bank and Bills CSVs. Found automatically from a backup or Xero export.</span></label>
+      <label class="check" style="align-self:center;"><input type="checkbox" id="f-inperiod" data-bind="imp.inPeriodOnly"> Only take lines dated inside the period</label>
+    </div>
+    <ul class="log" id="log"></ul>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Start again</h2></div>
+    <div class="row-actions" id="resetRow">
+      <button class="btn danger" id="resetBtn" type="button">Clear this client</button>
+      <span class="muted small">Export first if you want to keep the workings.</span>
+    </div>
+  </section>
+  </div>
+</div>
+
+<!-- ───────────── USE OF HOME ───────────── -->
+<div data-pane="uoh" hidden>
+  <div style="display:grid;gap:18px;">
+  <section class="panel">
+    <div class="panel-head">
+      <div><h2>Use of Home</h2><p class="muted small">Expenses sheet, Use of Home section</p></div>
+      <div class="method" role="group" aria-label="Method claimed">
+        <button type="button" data-method="actual">Actual costs</button>
+        <button type="button" data-method="flat">HMRC flat rate</button>
+      </div>
+    </div>
+
+    <div>
+      <h3>Running costs paid</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Item</th><th>Notes</th><th class="n">This year £</th><th class="n">Last year £</th><th></th></tr></thead>
+          <tbody id="uohLines"></tbody>
+          <tfoot>
+            <tr class="total"><td colspan="2">Total running costs paid</td><td class="n" data-out="uohTotal"></td><td class="n" data-out="uohTotalPrior"></td><td></td></tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="row-actions" style="margin-top:10px;">
+        <button class="btn" type="button" id="addLine">+ Add item</button>
+        <button class="btn" type="button" id="copyPrior">Use last year's figures for empty items</button>
+        <span class="muted small">Amounts accept sums, e.g. <code>200*12</code> or <code>134+166</code>.</span>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="fields" style="align-content:start;">
+        <h3 style="grid-column:1/-1;margin:0;">Work space</h3>
+        <label class="field"><span>Rooms in the home</span><input class="num" id="f-rooms" data-bind="uoh.totalRooms" inputmode="decimal"><span class="hint" data-out="roomsPrior"></span></label>
+        <label class="field"><span>Rooms used for work</span><input class="num" id="f-wrooms" data-bind="uoh.workRooms" inputmode="decimal"></label>
+        <h3 style="grid-column:1/-1;margin:6px 0 0;">Time used for work</h3>
+        <label class="field"><span>Hours a week working from home</span><input class="num" id="f-hours" data-bind="uoh.hours" inputmode="decimal"><span class="hint">Counted as days of 10 hours, out of 7. Leave blank to enter a % instead.</span></label>
+        <label class="field"><span>Or business time %</span><input class="num" id="f-timepct" data-bind="uoh.timePct" inputmode="decimal"><span class="hint" data-out="timePrior"></span></label>
+        <h3 style="grid-column:1/-1;margin:6px 0 0;">Shared work space</h3>
+        <label class="check" style="grid-column:1/-1;"><input type="checkbox" id="f-shared" data-bind="uoh.shared"> Client shares the work space with a partner</label>
+        <label class="field"><span>Partner's share to disallow %</span><input class="num" id="f-sharedpct" data-bind="uoh.sharedPct" inputmode="decimal"></label>
+      </div>
+      <div style="min-width:0;">
+        <h3>Working</h3>
+        <div class="table-wrap">
+          <table class="calc"><tbody id="uohCalc"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>HMRC flat rate comparison</h2><span class="muted small">£10 for 25–50 hours a month, £18 for 51–100, £26 for 101 or more</span></div>
+    <div class="fields">
+      <label class="field"><span>Hours a month working from home</span><input class="num" id="f-flathours" data-bind="uoh.flatHours" inputmode="decimal"><span class="hint" data-out="flatHint"></span></label>
+      <label class="field"><span>Months</span><input class="num" id="f-flatmonths" data-bind="uoh.flatMonths" inputmode="decimal"></label>
+      <div class="field"><span>Flat rate claim</span><b data-out="flatTotal" style="font:600 18px var(--font-display);"></b><span class="hint" data-out="flatCompare"></span></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Notes</h2></div>
+    <label class="field"><span>This year's notes</span><textarea id="f-uohnotes" data-bind="uoh.notes" placeholder="e.g. Per email 10.01.27: …"></textarea></label>
+    <div class="field" id="uohPriorWrap"><span>Last year's notes</span><div class="prior-text" data-out="uohPriorNotes"></div></div>
+  </section>
+  </div>
+</div>
+
+<!-- ───────────── CAPITAL ALLOWANCES ───────────── -->
+<div data-pane="ca" hidden>
+  <div style="display:grid;gap:18px;">
+  <section class="panel">
+    <div class="panel-head"><div><h2>Capital allowances</h2><p class="muted small">CA sheet. Written down values brought forward come from last year's carried forward figures.</p></div></div>
+
+    <div class="pool">
+      <div class="pool-head"><h3 style="margin:0;">Main pool, 18%</h3><span class="chip" data-out="mainClaim"></span></div>
+      <div class="fields">
+        <label class="field"><span>TWDV b/fwd</span><input class="num" id="ca-mbf" data-bind="ca.mainBf" inputmode="decimal"></label>
+        <label class="field"><span>Additions</span><input class="num" id="ca-madd" data-bind="ca.mainAdd" inputmode="decimal"><span class="hint">Under the cash basis most equipment is an expense instead.</span></label>
+        <label class="field"><span>Disposal proceeds</span><input class="num" id="ca-mdisp" data-bind="ca.mainDisp" inputmode="decimal"></label>
+        <label class="check"><input type="checkbox" id="ca-maia" data-bind="ca.mainAia"> Claim AIA on additions</label>
+      </div>
+    </div>
+
+    <div class="pool">
+      <div class="pool-head"><h3 style="margin:0;">Special rate pool, 6%</h3><span class="chip" data-out="srClaim"></span></div>
+      <div class="fields">
+        <label class="field"><span>TWDV b/fwd</span><input class="num" id="ca-sbf" data-bind="ca.srBf" inputmode="decimal"></label>
+        <label class="field"><span>Additions</span><input class="num" id="ca-sadd" data-bind="ca.srAdd" inputmode="decimal"><span class="hint">e.g. cars over 50 g/km with no private use</span></label>
+        <label class="field"><span>Disposal proceeds</span><input class="num" id="ca-sdisp" data-bind="ca.srDisp" inputmode="decimal"></label>
+      </div>
+    </div>
+
+    <div style="display:grid;gap:10px;">
+      <div class="panel-head"><h3 style="margin:0;">Cars and other assets with private use (single asset pools)</h3>
+        <button class="btn" type="button" id="addPool">+ Add car or asset</button></div>
+      <div id="pools" style="display:grid;gap:10px;"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Summary</h2></div>
+    <div class="table-wrap"><table><thead><tr><th>Pool</th><th class="n">TWDV b/fwd</th><th class="n">Additions</th><th class="n">AIA / FYA</th><th class="n">Disposals</th><th class="n">WDA / balancing</th><th class="n">TWDV c/fwd</th><th class="n">Business %</th><th class="n">Allowance claimed</th></tr></thead>
+      <tbody id="caTable"></tbody></table></div>
+    <label class="field"><span>Notes</span><textarea id="f-canotes" data-bind="ca.notes"></textarea></label>
+  </section>
+  </div>
+</div>
+
+<!-- ───────────── TAX ───────────── -->
+<div data-pane="tax" hidden>
+  <div style="display:grid;gap:18px;">
+  <section class="panel">
+    <div class="panel-head"><div><h2>Self-employment profit</h2><p class="muted small">Net profit from the accounts, before Use of Home and capital allowances.</p></div></div>
+    <div class="table-wrap">
+      <table class="calc">
+        <thead><tr><th></th><th class="n">This year £</th><th class="n">Last year £</th></tr></thead>
+        <tbody>
+          <tr><td>Net profit per accounts, before Use of Home and capital allowances</td><td class="n"><input class="num" id="t-profit" data-bind="profit.before" inputmode="decimal"></td><td class="n" data-out="pPriorBefore"></td></tr>
+          <tr><td>Less: Use of Home</td><td class="n" data-out="pUoh"></td><td class="n" data-out="pPriorUoh"></td></tr>
+          <tr><td>Less: capital allowances</td><td class="n" data-out="pCa"></td><td class="n" data-out="pPriorCa"></td></tr>
+          <tr><td>Tax adjustments (+ add back, − deduct)</td><td class="n"><input class="num" id="t-adj" data-bind="profit.adjustments" inputmode="decimal"></td><td class="n" data-out="pPriorAdj"></td></tr>
+          <tr class="total"><td>Taxable trading profit</td><td class="n" data-out="pTaxable"></td><td class="n" data-out="pPriorTaxable"></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><div><h2>Other income and reliefs</h2><p class="muted small">Tax sheet</p></div></div>
+    <div class="table-wrap">
+      <table class="calc">
+        <thead><tr><th></th><th class="n">This year £</th><th class="n">Last year £</th></tr></thead>
+        <tbody id="taxInputs"></tbody>
+      </table>
+    </div>
+    <div class="fields">
+      <label class="field"><span>Student loan</span><select id="t-sl" data-bind="tax.slPlan"><option>None</option><option>Plan 1</option><option>Plan 2</option><option>Plan 4</option><option>Postgraduate</option></select><span class="hint" data-out="slPrior"></span></label>
+      <label class="field"><span>Student loan already deducted through PAYE £</span><input class="num" id="t-slpaye" data-bind="tax.slPaye" inputmode="decimal"></label>
+      <label class="check"><input type="checkbox" id="t-cb" data-bind="tax.cb"> Client or partner receives Child Benefit</label>
+      <label class="field"><span>Number of children</span><input class="num" id="t-children" data-bind="tax.children" inputmode="decimal"><span class="hint" data-out="cbPrior"></span></label>
+      <label class="field"><span>Weeks received in the year</span><input class="num" id="t-cbweeks" data-bind="tax.cbWeeks" inputmode="decimal"></label>
+      <label class="field"><span>Payments on account already made for this year £</span><input class="num" id="t-poa" data-bind="tax.poaPaid" inputmode="decimal"><span class="hint">Both instalments, 31 Jan and 31 Jul</span></label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Tax estimate</h2><span class="muted small" data-out="ratesNote"></span></div>
+    <div class="grid2">
+      <div class="table-wrap"><table class="calc"><tbody id="taxCalc"></tbody></table></div>
+      <div class="table-wrap"><table class="calc"><tbody id="taxPay"></tbody></table></div>
+    </div>
+    <p class="muted small">Uses rest-of-UK rates (not Scottish). Gift Aid and relief-at-source pension contributions extend the basic and higher rate bands. Class 2 NI is no longer charged. Losses and capital gains are not worked out here.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Notes</h2></div>
+    <label class="field"><span>This year's notes</span><textarea id="f-taxnotes" data-bind="tax.notes"></textarea></label>
+    <div class="field" id="taxPriorWrap"><span>Last year's notes</span><div class="prior-text" data-out="taxPriorNotes"></div></div>
+  </section>
+  </div>
+</div>
+
+<!-- ───────────── EXPORT ───────────── -->
+<div data-pane="export" hidden>
+  <section class="panel">
+    <div class="panel-head"><h2>Export</h2></div>
+    <p>Downloads one Excel workbook with Summary, Use of Home, CA and Tax sheets. Drop it back in next year to roll everything forward, or this year to carry on editing.</p>
+    <div class="row-actions"><button class="btn primary" type="button" id="exportBtn">↓ Download Excel workbook</button><span class="muted small" data-out="exportName"></span></div>
+  </section>
+</div>
+
+</main>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="vendor/xlsx-0.18.5.full.min.js"></script>
+<script>
+'use strict';
+
+// ── Rates ──────────────────────────────────────────────────────────────────
+const RATES = {
+  '2024/25': {
+    pa: 12570, taper: 100000, brb: 37700, hrl: 125140,
+    rates: [0.20, 0.40, 0.45], div: [0.0875, 0.3375, 0.3935], divAllow: 500, psa: [1000, 500, 0], startSav: 5000,
+    c4: { lpl: 12570, upl: 50270, main: 0.06, add: 0.02 },
+    hicbc: { lo: 60000, hi: 80000 }, cb: [25.60, 16.95],
+    sl: { 'Plan 1': [24990, 0.09], 'Plan 2': [27295, 0.09], 'Plan 4': [31395, 0.09], 'Postgraduate': [21000, 0.06] },
+  },
+  '2025/26': {
+    pa: 12570, taper: 100000, brb: 37700, hrl: 125140,
+    rates: [0.20, 0.40, 0.45], div: [0.0875, 0.3375, 0.3935], divAllow: 500, psa: [1000, 500, 0], startSav: 5000,
+    c4: { lpl: 12570, upl: 50270, main: 0.06, add: 0.02 },
+    hicbc: { lo: 60000, hi: 80000 }, cb: [26.05, 17.25],
+    sl: { 'Plan 1': [26065, 0.09], 'Plan 2': [28470, 0.09], 'Plan 4': [32745, 0.09], 'Postgraduate': [21000, 0.06] },
+  },
+};
+const FLAT_RATE = [[101, 26], [51, 18], [25, 10]]; // hours a month → £ a month
+const AIA_LIMIT = 1000000;
+
+// Tax sheet inputs, in the order of the working papers.
+const TAX_ROWS = [
+  ['employment', 'Salaries, gross'],
+  ['paye', 'Tax paid on salaries (PAYE)'],
+  ['pensionIncome', 'Pensions received, gross'],
+  ['pensionTax', 'Tax paid on pensions'],
+  ['property', 'Income from land and property'],
+  ['savings', 'Savings interest'],
+  ['dividends', 'Dividends'],
+  ['other', 'Other income'],
+  ['pensionNet', 'Pension contributions, net paid'],
+  ['giftAid', 'Gift Aid donations, net paid'],
+];
+
+// ── State ──────────────────────────────────────────────────────────────────
+const STORE_KEY = 'yearEnd:v1';
+function blankState() {
+  return {
+    v: 1,
+    client: { name: '', taxYear: '2025/26', start: '2025-04-06', end: '2026-04-05', basis: 'Cash basis' },
+    imp: { uohCode: '', inPeriodOnly: true, log: [] },
+    profit: { before: '', adjustments: '', prior: {} },
+    uoh: {
+      method: 'actual', lines: [], totalRooms: '', workRooms: '', hours: '', timePct: '',
+      shared: false, sharedPct: '50', flatHours: '', flatMonths: '12', notes: '',
+      prior: { total: null, notes: '', rooms: '', workRooms: '', timePct: null, method: '' },
+    },
+    ca: { mainBf: '', mainAdd: '', mainDisp: '', mainAia: true, srBf: '', srAdd: '', srDisp: '', pools: [], notes: '', prior: { total: null } },
+    tax: { slPlan: 'None', slPaye: '', cb: false, children: '1', cbWeeks: '52', poaPaid: '', notes: '', prior: { notes: '' } },
+  };
+}
+let S = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) return mergeDeep(blankState(), JSON.parse(raw));
+  } catch (_) {}
+  return blankState();
+}
+let saveTimer = null;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch (_) {} }, 300);
+}
+function mergeDeep(base, extra) {
+  if (!extra || typeof extra !== 'object' || Array.isArray(extra)) return extra === undefined ? base : extra;
+  const out = { ...base };
+  for (const k of Object.keys(extra)) {
+    out[k] = base && typeof base[k] === 'object' && base[k] !== null && !Array.isArray(base[k]) ? mergeDeep(base[k], extra[k]) : extra[k];
+  }
+  return out;
+}
+function getPath(obj, path) { return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj); }
+function setPath(obj, path, val) {
+  const ks = path.split('.'); const last = ks.pop();
+  const t = ks.reduce((o, k) => o[k], obj); t[last] = val;
+}
+
+// ── Numbers ────────────────────────────────────────────────────────────────
+// Amounts may be typed as simple sums like "200*12" or "£2,085.82".
+function num(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).replace(/[£,\s]/g, '').replace(/^=/, '');
+  if (s.endsWith('%')) s = s.slice(0, -1);
+  if (/^\(?-?[\d.]+\)?$/.test(s) && s.startsWith('(')) s = '-' + s.slice(1, -1);
+  if (!/^[\d+\-*/().]+$/.test(s)) return 0;
+  try { const r = Function('"use strict";return (' + s + ')')(); return isFinite(r) ? r : 0; } catch (_) { return 0; }
+}
+const has = v => v !== null && v !== undefined && String(v).trim() !== '';
+const r2 = x => Math.round((x + Number.EPSILON) * 100) / 100;
+const fmt = (x, dp = 2) => (x < 0 ? '−' : '') + '£' + Math.abs(x).toLocaleString('en-GB', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+const fmt0 = x => fmt(x, 0);
+const pct = x => (Math.round(x * 10000) / 100).toLocaleString('en-GB', { maximumFractionDigits: 2 }) + '%';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ── Use of Home ────────────────────────────────────────────────────────────
+function lineAmount(l) {
+  if (has(l.expr)) return num(l.expr);
+  return Object.values(l.imp || {}).reduce((a, b) => a + b, 0);
+}
+function calcUoh(st = S) {
+  const u = st.uoh;
+  const total = r2(u.lines.reduce((a, l) => a + lineAmount(l), 0));
+  const rooms = num(u.totalRooms), work = num(u.workRooms);
+  const roomFrac = rooms > 0 && work > 0 ? Math.min(work / rooms, 1) : 1;
+  const afterRooms = total * roomFrac;
+  let timeFrac = 1, timeText = 'No time split entered';
+  if (has(u.hours)) {
+    const days = Math.min(num(u.hours) / 10, 7);
+    timeFrac = days / 7;
+    timeText = `${num(u.hours)} hours a week = ${r2(days)} days of 10 hours, out of 7`;
+  } else if (has(u.timePct)) {
+    timeFrac = Math.min(Math.max(num(u.timePct) / 100, 0), 1);
+    timeText = 'Business time ' + pct(timeFrac);
+  }
+  const afterTime = afterRooms * timeFrac;
+  const shareFrac = u.shared ? Math.min(Math.max(num(u.sharedPct) / 100, 0), 1) : 0;
+  const actual = afterTime * (1 - shareFrac);
+  // Without a monthly figure, estimate it from hours a week.
+  const hrs = has(u.flatHours) ? num(u.flatHours) : has(u.hours) ? Math.round(num(u.hours) * 52 / 12) : 0;
+  const rate = (FLAT_RATE.find(([h]) => hrs >= h) || [0, 0])[1];
+  const flat = rate * num(u.flatMonths || 12);
+  const claim = u.method === 'flat' ? flat : actual;
+  return {
+    total, roomFrac, afterRooms, timeFrac, timeText, afterTime, shareFrac, actual, flatRate: rate, flat,
+    claim, figure: Math.ceil(r2(claim) - 1e-9), // the working papers round expenses up to whole pounds
+  };
+}
+
+// ── Capital allowances ─────────────────────────────────────────────────────
+function calcPool(bf, add, disp, rate, aia) {
+  const aiaAmt = aia ? Math.min(add, AIA_LIMIT) : 0;
+  let pool = bf + add - aiaAmt - disp;
+  let bc = 0, wda = 0, spa = false;
+  if (pool < 0) { bc = -pool; pool = 0; }
+  else if (pool > 0 && pool <= 1000) { wda = pool; spa = true; }
+  else wda = pool * rate;
+  wda = r2(wda);
+  return { bf, add, aia: aiaAmt, disp, wda, bc, spa, cf: r2(pool - wda), claim: r2(aiaAmt + wda - bc), biz: 1 };
+}
+function calcSinglePool(p) {
+  const bf = num(p.bf), cost = num(p.cost), proceeds = p.disposed ? num(p.proceeds) : 0;
+  const biz = Math.min(Math.max(has(p.bizPct) ? num(p.bizPct) / 100 : 1, 0), 1);
+  const fya = p.fya ? cost : 0;
+  let wda = 0, ba = 0, bc = 0, cf;
+  const pool = bf + cost - fya;
+  if (p.disposed) {
+    const bal = pool - proceeds;
+    if (bal > 0) ba = bal; else bc = -bal;
+    cf = 0;
+  } else {
+    wda = r2(pool * num(p.rate) / 100);
+    cf = r2(pool - wda);
+  }
+  const gross = fya + wda + ba - bc;
+  return { bf, add: cost, aia: fya, disp: proceeds, wda: r2(wda + ba - bc), ba, bc, cf, biz, claim: r2(gross * biz) };
+}
+function calcCa(st = S) {
+  const c = st.ca;
+  const main = calcPool(num(c.mainBf), num(c.mainAdd), num(c.mainDisp), 0.18, c.mainAia);
+  const sr = calcPool(num(c.srBf), num(c.srAdd), num(c.srDisp), 0.06, false);
+  const pools = c.pools.map(calcSinglePool);
+  const total = r2(main.claim + sr.claim + pools.reduce((a, p) => a + p.claim, 0));
+  return { main, sr, pools, total, figure: Math.round(total) };
+}
+
+// ── Tax ────────────────────────────────────────────────────────────────────
+const LATEST_RATES = Object.keys(RATES).sort().pop();
+function calcTax(st = S, trading) {
+  const R = RATES[st.client.taxYear] || RATES[LATEST_RATES];
+  const t = st.tax;
+  const g = k => num(t[k]);
+  const trade = Math.max(trading, 0);
+  const nonSav = trade + g('employment') + g('pensionIncome') + g('property') + g('other');
+  const sav = g('savings'), div = g('dividends');
+  const totalIncome = nonSav + sav + div;
+  const grossRelief = (g('pensionNet') + g('giftAid')) * 1.25;
+  const ani = totalIncome - grossRelief;
+  const pa = Math.max(0, R.pa - Math.floor(Math.max(0, ani - R.taper) / 2));
+  let paLeft = pa;
+  const take = x => { const u = Math.min(paLeft, x); paLeft -= u; return x - u; };
+  const nsT = take(nonSav), svT = take(sav), dvT = take(div);
+  const brb = R.brb + grossRelief, hrl = R.hrl + grossRelief;
+  const taxable = nsT + svT + dvT;
+  const lines = [];
+  // Charges `amount` starting at band position `pos`, with rates for basic/higher/additional.
+  const charge = (label, amount, pos, rates) => {
+    const edges = [[0, brb], [brb, hrl], [hrl, Infinity]];
+    const names = ['basic', 'higher', 'additional'];
+    let tax = 0;
+    edges.forEach(([lo, hi], i) => {
+      const part = Math.max(0, Math.min(pos + amount, hi) - Math.max(pos, lo));
+      if (part > 0) { const tx = part * rates[i]; tax += tx; lines.push([`${label}, ${names[i]} rate: ${fmt(part)} @ ${pct(rates[i])}`, tx]); }
+    });
+    return tax;
+  };
+  let it = 0;
+  it += charge('Non-savings', nsT, 0, R.rates);
+  // Savings: starting rate band, then the personal savings allowance, both at 0%.
+  const startBand = Math.max(0, R.startSav - nsT);
+  const sr = Math.min(svT, startBand);
+  const psa = taxable > hrl ? R.psa[2] : taxable > brb ? R.psa[1] : R.psa[0];
+  const psaUsed = Math.min(svT - sr, psa);
+  if (sr > 0) lines.push([`Savings, starting rate: ${fmt(sr)} @ 0%`, 0]);
+  if (psaUsed > 0) lines.push([`Savings, personal savings allowance: ${fmt(psaUsed)} @ 0%`, 0]);
+  it += charge('Savings', svT - sr - psaUsed, nsT + sr + psaUsed, R.rates);
+  const dAllow = Math.min(dvT, R.divAllow);
+  if (dAllow > 0) lines.push([`Dividends, allowance: ${fmt(dAllow)} @ 0%`, 0]);
+  it += charge('Dividends', dvT - dAllow, nsT + svT + dAllow, R.div);
+  it = r2(it);
+
+  const c4 = r2(Math.max(0, Math.min(trade, R.c4.upl) - R.c4.lpl) * R.c4.main + Math.max(0, trade - R.c4.upl) * R.c4.add);
+
+  let sl = 0, slNote = '';
+  const plan = R.sl[t.slPlan];
+  if (plan) {
+    const unearned = g('property') + sav + div + g('other') + g('pensionIncome');
+    const slIncome = trade + g('employment') + (unearned > 2000 ? unearned : 0);
+    sl = Math.max(0, Math.floor(Math.max(0, slIncome - plan[0]) * plan[1]) - g('slPaye'));
+    slNote = `${t.slPlan}: ${pct(plan[1])} over ${fmt0(plan[0])}`;
+  }
+
+  let hicbc = 0, cbAmount = 0, hicbcPct = 0;
+  if (t.cb) {
+    const kids = Math.max(1, Math.round(num(t.children) || 1));
+    cbAmount = r2((R.cb[0] + R.cb[1] * (kids - 1)) * num(t.cbWeeks || 52));
+    hicbcPct = Math.min(100, Math.max(0, Math.floor((ani - R.hicbc.lo) / ((R.hicbc.hi - R.hicbc.lo) / 100))));
+    hicbc = Math.floor(cbAmount * hicbcPct / 100);
+  }
+
+  const atSource = g('paye') + g('pensionTax');
+  const liability = r2(it + c4 + sl + hicbc);
+  const poaBase = r2(it + c4 + hicbc - atSource);
+  const poaNeeded = poaBase >= 1000 && atSource < 0.8 * (it + c4 + hicbc);
+  const poa = poaNeeded ? r2(poaBase / 2) : 0;
+  const balancing = r2(liability - atSource - num(t.poaPaid));
+  const endYear = Number(String(st.client.taxYear).slice(0, 4)) + 1;
+  return {
+    nonSav, sav, div, totalIncome, grossRelief, ani, pa, taxable, brb, hrl, lines, it, c4, sl, slNote, cbAmount, hicbcPct, hicbc,
+    atSource, liability, poaNeeded, poa, balancing, janTotal: r2(balancing + poa), endYear, R,
+  };
+}
+
+function compute(st = S) {
+  const uoh = calcUoh(st), ca = calcCa(st);
+  const taxable = r2(num(st.profit.before) - uoh.figure - ca.figure + num(st.profit.adjustments));
+  const tax = calcTax(st, taxable);
+  return { uoh, ca, taxable, tax };
+}
+
+// ── Rendering ──────────────────────────────────────────────────────────────
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+function out(key, html) { $$(`[data-out="${key}"]`).forEach(el => { el.innerHTML = html; }); }
+
+function yearOptions() {
+  const years = [...new Set([...Object.keys(RATES), S.client.taxYear])].sort().reverse();
+  $('#f-year').innerHTML = years.map(y => `<option>${esc(y)}</option>`).join('');
+}
+function bindAll() {
+  yearOptions();
+  $$('[data-bind]').forEach(el => {
+    const v = getPath(S, el.dataset.bind);
+    if (el.type === 'checkbox') el.checked = !!v;
+    else if (document.activeElement !== el) el.value = v ?? '';
+  });
+}
+document.addEventListener('input', onField);
+document.addEventListener('change', onField);
+function onField(e) {
+  const el = e.target;
+  if (!el.dataset || !el.dataset.bind) return;
+  setPath(S, el.dataset.bind, el.type === 'checkbox' ? el.checked : el.value);
+  if (el.dataset.rerender) renderLists();
+  refresh();
+}
+
+function renderLists() {
+  // Use of Home lines
+  $('#uohLines').innerHTML = S.uoh.lines.map((l, i) => {
+    const imp = Object.keys(l.imp || {});
+    const shown = has(l.expr) ? '' : imp.length ? fmt(lineAmount(l)) : '';
+    return `<tr>
+      <td style="min-width:150px;"><input id="ul-d-${i}" data-bind="uoh.lines.${i}.desc" aria-label="Item"></td>
+      <td style="min-width:180px;"><input id="ul-n-${i}" data-bind="uoh.lines.${i}.note" aria-label="Notes">${imp.length ? `<div class="small muted" style="margin-top:3px;">From ${imp.map(esc).join(', ')}</div>` : ''}</td>
+      <td class="n" style="min-width:120px;"><input class="num" id="ul-a-${i}" data-bind="uoh.lines.${i}.expr" inputmode="decimal" placeholder="${esc(shown)}" aria-label="This year"><div class="small muted" data-out="ulv-${i}"></div></td>
+      <td class="n">${l.prior != null ? fmt(l.prior) : '<span class="muted">–</span>'}${l.priorExpr ? `<div class="small muted">${esc(l.priorExpr)}</div>` : ''}</td>
+      <td><button class="btn link danger" type="button" data-del-line="${i}" aria-label="Remove item">✕</button></td></tr>`;
+  }).join('') || `<tr><td colspan="5" class="muted">No items yet. Drop in last year's working papers or add an item.</td></tr>`;
+
+  // Single asset pools
+  $('#pools').innerHTML = S.ca.pools.map((p, i) => `
+    <div class="pool">
+      <div class="pool-head"><input id="cp-d-${i}" data-bind="ca.pools.${i}.desc" style="max-width:340px;font-weight:600;" aria-label="Asset">
+        <span class="row-actions"><span class="chip" data-out="poolClaim-${i}"></span><button class="btn link danger" type="button" data-del-pool="${i}">Remove</button></span></div>
+      <div class="fields">
+        <label class="field"><span>TWDV b/fwd</span><input class="num" id="cp-bf-${i}" data-bind="ca.pools.${i}.bf" inputmode="decimal"></label>
+        <label class="field"><span>Cost if bought this year</span><input class="num" id="cp-c-${i}" data-bind="ca.pools.${i}.cost" inputmode="decimal"></label>
+        <label class="field"><span>Rate</span><select id="cp-r-${i}" data-bind="ca.pools.${i}.rate">
+          <option value="18">18% (car up to 50 g/km)</option><option value="6">6% (car over 50 g/km)</option></select></label>
+        <label class="field"><span>Business use %</span><input class="num" id="cp-b-${i}" data-bind="ca.pools.${i}.bizPct" inputmode="decimal"></label>
+        <label class="check"><input type="checkbox" id="cp-f-${i}" data-bind="ca.pools.${i}.fya"> 100% first-year allowance on the cost (new, unused, zero-emission car)</label>
+        <label class="check"><input type="checkbox" id="cp-x-${i}" data-bind="ca.pools.${i}.disposed" data-rerender="1"> Sold or scrapped this year</label>
+        ${p.disposed ? `<label class="field"><span>Disposal proceeds</span><input class="num" id="cp-p-${i}" data-bind="ca.pools.${i}.proceeds" inputmode="decimal"></label>` : ''}
+      </div>
+      ${p.note ? `<p class="muted small">${esc(p.note)}</p>` : ''}
+    </div>`).join('') || '<p class="muted small">None. Cars with private use each go in their own pool.</p>';
+
+  // Tax inputs
+  $('#taxInputs').innerHTML = TAX_ROWS.map(([k, label]) => `<tr><td>${label}</td>
+    <td class="n"><input class="num" id="t-${k}" data-bind="tax.${k}" inputmode="decimal"></td>
+    <td class="n">${S.tax.prior[k] != null ? fmt(S.tax.prior[k]) : '<span class="muted">–</span>'}</td></tr>`).join('');
+  bindAll();
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  if (t.dataset.delLine != null) { S.uoh.lines.splice(+t.dataset.delLine, 1); renderLists(); refresh(); }
+  if (t.dataset.delPool != null) { S.ca.pools.splice(+t.dataset.delPool, 1); renderLists(); refresh(); }
+  if (t.dataset.method) { S.uoh.method = t.dataset.method; refresh(); }
+  if (t.dataset.tab) showTab(t.dataset.tab);
+});
+$('#addLine').onclick = () => { S.uoh.lines.push({ desc: '', note: '', expr: '', prior: null, imp: {} }); renderLists(); refresh(); $(`#ul-d-${S.uoh.lines.length - 1}`).focus(); };
+$('#copyPrior').onclick = () => {
+  let n = 0;
+  S.uoh.lines.forEach(l => { if (!has(l.expr) && !Object.keys(l.imp || {}).length && l.prior != null) { l.expr = l.priorExpr || String(l.prior); n++; } });
+  renderLists(); refresh(); toast(n ? `Filled ${n} item${n > 1 ? 's' : ''} with last year's figures.` : 'No empty items with a figure from last year.');
+};
+$('#addPool').onclick = () => { S.ca.pools.push({ desc: 'Car', bf: '', cost: '', rate: '18', bizPct: '100', fya: false, disposed: false, proceeds: '' }); renderLists(); refresh(); };
+
+function showTab(name) {
+  $$('nav.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+  $$('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== name; });
+  try { sessionStorage.setItem('yearEnd:tab', name); } catch (_) {}
+}
+
+function calcRow(label, val, cls = '', prior) {
+  return `<tr class="${cls}"><td>${label}</td><td class="n">${val}</td>${prior !== undefined ? `<td class="n muted">${prior}</td>` : ''}</tr>`;
+}
+
+function refresh() {
+  const C = compute();
+  const { uoh, ca, tax } = C;
+  const P = S.uoh.prior, PP = S.profit.prior;
+
+  $('#hdrClient').textContent = S.client.name || 'No client loaded';
+  $('#hdrYear').textContent = `${S.client.taxYear} · ${S.client.basis}`;
+
+  // Summary strip
+  out('sumUoh', fmt0(uoh.figure));
+  out('sumUohPrior', P.total != null ? 'Last year ' + fmt0(Math.ceil(P.total - 1e-9)) : '');
+  out('sumCa', fmt0(ca.figure));
+  out('sumCaPrior', S.ca.prior.total != null ? 'Last year ' + fmt0(S.ca.prior.total) : '');
+  out('sumProfit', fmt0(C.taxable));
+  out('sumProfitPrior', PP.taxable != null ? 'Last year ' + fmt0(PP.taxable) : '');
+  out('sumTax', fmt0(tax.liability));
+  out('sumTaxPrior', 'Before tax deducted at source');
+  out('sumJan', fmt0(tax.janTotal));
+  out('sumJanNote', `31 Jan ${tax.endYear + 1}, incl. 1st payment on account`);
+
+  // Use of Home
+  $$('.method button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.method === S.uoh.method)));
+  S.uoh.lines.forEach((l, i) => out('ulv-' + i, has(l.expr) && /[*+\/()]|-.*-/.test(l.expr) ? '= ' + fmt(lineAmount(l)) : ''));
+  out('uohTotal', fmt(uoh.total));
+  const priorSum = S.uoh.lines.reduce((a, l) => a + (l.prior || 0), 0);
+  out('uohTotalPrior', priorSum ? fmt(priorSum) : '');
+  out('roomsPrior', P.rooms ? `Last year: ${P.workRooms || '?'} of ${P.rooms} rooms` : '');
+  out('timePrior', P.timePct != null ? `Last year claimed ${pct(P.timePct)} of the time` : '');
+  const rooms = num(S.uoh.totalRooms), work = num(S.uoh.workRooms);
+  $('#uohCalc').innerHTML =
+    calcRow('Total running costs paid', fmt(uoh.total)) +
+    calcRow(rooms && work ? `Work space: ${work} of ${rooms} rooms (${pct(uoh.roomFrac)})` : 'Work space: no rooms entered', fmt(-(uoh.total - uoh.afterRooms)), 'sub') +
+    calcRow('Subtotal', fmt(uoh.afterRooms)) +
+    calcRow(`${esc(uoh.timeText)} (${pct(uoh.timeFrac)} business)`, fmt(-(uoh.afterRooms - uoh.afterTime)), 'sub') +
+    calcRow('Subtotal', fmt(uoh.afterTime)) +
+    calcRow(S.uoh.shared ? `Shared with partner, disallow ${pct(uoh.shareFrac)}` : 'Not shared with a partner', fmt(-(uoh.afterTime - uoh.actual)), 'sub') +
+    calcRow('Actual costs claim', fmt(uoh.actual), S.uoh.method === 'actual' ? 'total' : '') +
+    calcRow('HMRC flat rate claim', fmt(uoh.flat), S.uoh.method === 'flat' ? 'total' : 'sub') +
+    calcRow('Figure for accounts (rounded up)', fmt0(uoh.figure), 'key') +
+    (P.total != null ? calcRow('Last year', fmt(P.total), 'sub') : '');
+  out('flatTotal', fmt(uoh.flat));
+  out('flatHint', has(S.uoh.hours) && !has(S.uoh.flatHours) ? `Estimated at ${Math.round(num(S.uoh.hours) * 52 / 12)} hours from ${num(S.uoh.hours)} a week, so ${fmt0(uoh.flatRate)} a month` : `${fmt0(uoh.flatRate)} a month`);
+  out('flatCompare', uoh.flat > uoh.actual ? '<span class="chip warn">Higher than actual costs</span>' : uoh.flat ? 'Lower than actual costs' : '');
+  out('uohPriorNotes', esc(P.notes || ''));
+  $('#uohPriorWrap').hidden = !P.notes;
+
+  // CA
+  out('mainClaim', fmt(ca.main.claim));
+  out('srClaim', fmt(ca.sr.claim));
+  ca.pools.forEach((p, i) => out('poolClaim-' + i, fmt(p.claim)));
+  const caRow = (name, p, note = '') => `<tr><td>${esc(name)}${note}</td><td class="n">${fmt(p.bf)}</td><td class="n">${fmt(p.add)}</td><td class="n">${fmt(-p.aia)}</td><td class="n">${fmt(-p.disp)}</td><td class="n">${fmt(-p.wda)}</td><td class="n">${fmt(p.cf)}</td><td class="n">${pct(p.biz)}</td><td class="n">${fmt(p.claim)}</td></tr>`;
+  $('#caTable').innerHTML =
+    caRow('Main pool', ca.main, ca.main.spa ? ' <span class="chip">small pool</span>' : ca.main.bc ? ' <span class="chip warn">balancing charge</span>' : '') +
+    caRow('Special rate pool', ca.sr, ca.sr.spa ? ' <span class="chip">small pool</span>' : '') +
+    ca.pools.map((p, i) => caRow(S.ca.pools[i].desc || 'Asset ' + (i + 1), p, p.ba ? ' <span class="chip">balancing allowance</span>' : p.bc ? ' <span class="chip warn">balancing charge</span>' : '')).join('') +
+    `<tr class="total"><td colspan="8">Total capital allowances</td><td class="n">${fmt(ca.total)}</td></tr>` +
+    (S.ca.prior.total != null ? `<tr class="sub"><td colspan="8">Last year</td><td class="n">${fmt(S.ca.prior.total)}</td></tr>` : '');
+
+  // Profit
+  const pr = v => v != null ? fmt0(v) : '–';
+  out('pPriorBefore', pr(PP.before));
+  out('pUoh', fmt0(-uoh.figure)); out('pPriorUoh', PP.uoh != null ? fmt0(-PP.uoh) : '–');
+  out('pCa', fmt0(-ca.figure)); out('pPriorCa', PP.ca != null ? fmt0(-PP.ca) : '–');
+  out('pPriorAdj', pr(PP.adjustments));
+  out('pTaxable', fmt0(C.taxable)); out('pPriorTaxable', pr(PP.taxable));
+  out('slPrior', S.tax.prior.slPlan ? 'Last year: ' + esc(S.tax.prior.slPlan) : '');
+  out('cbPrior', S.tax.prior.cb ? 'Last year: ' + esc(S.tax.prior.cb) : '');
+
+  // Tax computation
+  const T = tax;
+  out('ratesNote', RATES[S.client.taxYear] ? `${S.client.taxYear} rates` : `<span class="chip warn">${esc(S.client.taxYear)} rates not in the tool yet; using ${LATEST_RATES}</span>`);
+  $('#taxCalc').innerHTML =
+    calcRow('Trading profit', fmt(Math.max(C.taxable, 0))) +
+    (C.taxable < 0 ? calcRow('<span class="chip warn">Trading loss</span> not set against other income here', fmt(C.taxable), 'sub') : '') +
+    calcRow('Total income', fmt(T.totalIncome), 'total') +
+    calcRow('Personal allowance' + (T.pa < T.R.pa ? ' (tapered)' : ''), fmt(-Math.min(T.pa, T.totalIncome)), 'sub') +
+    calcRow('Taxable income', fmt(T.taxable)) +
+    (T.grossRelief ? calcRow(`Bands extended by gross pension and Gift Aid`, fmt(T.grossRelief), 'sub') : '') +
+    T.lines.map(([l, v]) => calcRow(l, fmt(v), 'sub')).join('') +
+    calcRow('Income tax', fmt(T.it), 'total') +
+    calcRow('Class 4 NI (6% to £50,270, 2% above)', fmt(T.c4)) +
+    (S.tax.slPlan !== 'None' ? calcRow('Student loan: ' + esc(T.slNote), fmt(T.sl)) : '') +
+    (S.tax.cb ? calcRow(`High Income Child Benefit Charge: ${T.hicbcPct}% of ${fmt(T.cbAmount)}`, fmt(T.hicbc)) : '') +
+    calcRow('Total liability', fmt(T.liability), 'key');
+  $('#taxPay').innerHTML =
+    calcRow('Total liability', fmt(T.liability)) +
+    calcRow('Less: tax deducted at source', fmt(-T.atSource), 'sub') +
+    calcRow('Less: payments on account made', fmt(-num(S.tax.poaPaid)), 'sub') +
+    calcRow(`Balancing payment, 31 Jan ${T.endYear + 1}`, fmt(T.balancing), 'total') +
+    calcRow(T.poaNeeded ? `1st payment on account ${T.endYear}/${String(T.endYear + 1).slice(2)}, 31 Jan ${T.endYear + 1}` : 'No payments on account needed', fmt(T.poa), 'sub') +
+    calcRow(`Due 31 Jan ${T.endYear + 1}`, fmt(T.janTotal), 'key') +
+    calcRow(`2nd payment on account, 31 Jul ${T.endYear + 1}`, fmt(T.poa)) +
+    calcRow('Adjusted net income', fmt(T.ani), 'sub');
+  out('taxPriorNotes', esc(S.tax.prior.notes || ''));
+  $('#taxPriorWrap').hidden = !S.tax.prior.notes;
+
+  out('exportName', esc(exportFileName()));
+  renderLog();
+  save();
+}
+
+function renderLog() {
+  $('#log').innerHTML = (S.imp.log || []).map(([cls, msg]) => `<li class="${cls}">${esc(msg)}</li>`).join('');
+}
+function logMsg(cls, msg) { S.imp.log.unshift([cls, msg]); S.imp.log = S.imp.log.slice(0, 40); }
+
+let toastTimer;
+function toast(msg) {
+  const el = $('#toast'); el.textContent = msg; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
+}
+
+// Clear with an in-page confirmation step.
+function restoreResetRow() {
+  $('#resetRow').innerHTML = `<button class="btn danger" id="resetBtn" type="button">Clear this client</button><span class="muted small">Export first if you want to keep the workings.</span>`;
+  bindReset();
+}
+function bindReset() {
+  $('#resetBtn').onclick = () => {
+    $('#resetRow').innerHTML = `<div class="confirm"><span>Clear every figure for ${esc(S.client.name || 'this client')}?</span>
+      <button class="btn danger" type="button" id="resetYes">Clear</button><button class="btn" type="button" id="resetNo">Keep</button></div>`;
+    $('#resetYes').onclick = () => { S = blankState(); restoreResetRow(); renderLists(); refresh(); toast('Cleared.'); };
+    $('#resetNo').onclick = restoreResetRow;
+  };
+}
+bindReset();
+
+// ── Categories for Use of Home items ──────────────────────────────────────
+const UOH_CATS = [
+  [/mortgage/i, 'Mortgage interest'],
+  [/\brent\b|landlord|letting/i, 'Rent'],
+  [/council/i, 'Council tax'],
+  [/water|thames|affinity|severn|anglian|yorkshire w|united utilities|wessex/i, 'Water'],
+  [/\bgas\b|electric|energy|ovo|octopus|british gas|edf|e\.?on|scottish power|so energy|bulb/i, 'Gas and electricity'],
+  [/insurance|insure/i, 'Home insurance'],
+  [/broadband|internet|virgin media|\bbt\b|sky|talktalk|plusnet/i, 'Broadband'],
+  [/repair|maintenance|plumb|boiler/i, 'Repairs and maintenance'],
+  [/clean/i, 'Cleaning'],
+];
+const categoryOf = text => (UOH_CATS.find(([re]) => re.test(text || '')) || [null, null])[1];
+
+// ── Import: dispatch by contents ───────────────────────────────────────────
+const fileIn = $('#fileIn');
+fileIn.addEventListener('change', () => { handleFiles([...fileIn.files]); fileIn.value = ''; });
+const drop = $('#drop');
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => handleFiles([...e.dataTransfer.files]));
+// Allow dropping anywhere on the page too.
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => { if (!drop.contains(e.target)) { e.preventDefault(); handleFiles([...e.dataTransfer.files]); } });
+
+async function handleFiles(files) {
+  // Workbooks first (they set up last year), then backups (account code), then CSVs.
+  const order = f => /\.xls/i.test(f.name) ? 0 : /\.json$/i.test(f.name) ? 1 : 2;
+  for (const f of files.sort((a, b) => order(a) - order(b))) {
+    try {
+      if (/\.json$/i.test(f.name)) importBackup(f.name, JSON.parse(await f.text()));
+      else if (/\.csv$/i.test(f.name)) importCsv(f.name, await f.text());
+      else {
+        const wb = XLSX.read(await f.arrayBuffer(), { cellDates: true });
+        if (wb.SheetNames.includes('YE_DATA')) importOwnExport(f.name, wb);
+        else if (wb.SheetNames.some(n => /^expenses$/i.test(n)) || wb.SheetNames.some(n => /^CA$/i.test(n))) importWorkingPapers(f.name, wb);
+        else {
+          // A spreadsheet export of a CSV report (e.g. Xero as .xlsx).
+          const csv = XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
+          importCsv(f.name, csv);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      logMsg('warn', `${f.name}: could not be read (${e.message}).`);
+    }
+  }
+  renderLists(); refresh();
+}
+
+// ── Last year's working papers ─────────────────────────────────────────────
+function wsHelpers(ws) {
+  const v = addr => { const c = ws && ws[addr]; return c ? (c.v instanceof Date ? c.v : c.v) : undefined; };
+  const f = addr => { const c = ws && ws[addr]; return c && c.f ? c.f : ''; };
+  const range = ws && ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : { s: { r: 0 }, e: { r: -1 } };
+  // First row (1-based) at or after `from` whose column `col` matches `re`.
+  const find = (col, re, from = 1, to = range.e.r + 1) => {
+    for (let r = from; r <= to; r++) { const x = v(col + r); if (x != null && re.test(String(x).trim())) return r; }
+    return 0;
+  };
+  return { v, f, find, last: range.e.r + 1 };
+}
+const isNum = x => typeof x === 'number' && isFinite(x);
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function nextTaxYear(ty) { const a = Number(String(ty).slice(0, 4)); return `${a + 1}/${String(a + 2).slice(2)}`; }
+function taxYearOfEnd(d) { const y = d.getFullYear(); const before = d.getMonth() < 3 || (d.getMonth() === 3 && d.getDate() <= 5); const a = before ? y - 1 : y; return `${a}/${String(a + 1).slice(2)}`; }
+
+function importWorkingPapers(name, wb) {
+  const sheet = n => wb.Sheets[wb.SheetNames.find(x => x.toLowerCase() === n.toLowerCase())];
+  const chk = wsHelpers(sheet('Checklists'));
+  const ex = wsHelpers(sheet('Expenses'));
+  const ca = wsHelpers(sheet('CA'));
+  const tx = wsHelpers(sheet('Tax'));
+  const tb = wsHelpers(sheet('TB'));
+  const fresh = blankState();
+  fresh.imp = { ...S.imp };
+  const notes = [];
+
+  // Client and period: the papers are last year's, so this year starts the day after.
+  const client = chk.v('D3');
+  if (client) fresh.client.name = String(client).trim();
+  const end = chk.v('D5');
+  if (end instanceof Date) {
+    const s = new Date(end); s.setDate(s.getDate() + 1);
+    const e = new Date(end); e.setFullYear(e.getFullYear() + 1);
+    fresh.client.start = ymd(s); fresh.client.end = ymd(e);
+    fresh.client.taxYear = nextTaxYear(taxYearOfEnd(end));
+  }
+  if (chk.v('D6')) fresh.client.basis = /yes/i.test(chk.v('D6')) ? 'Cash basis' : 'Accruals basis';
+
+  // Use of Home section of the Expenses sheet.
+  const u = fresh.uoh;
+  const top = ex.find('B', /^use of home$/i);
+  if (top) {
+    const totalRow = ex.find('B', /^total - running costs/i, top) || top + 28;
+    const endRow = ex.find('B', /^total - figure for accounts/i, top) || totalRow + 20;
+    const priorNotes = [];
+    for (let r = top + 1; r < totalRow; r++) {
+      const d = ex.v('D' + r), e = ex.v('E' + r), h = ex.v('H' + r), b = ex.v('B' + r);
+      const text = [b, d].filter(x => x != null && String(x).trim()).join(' ');
+      if (isNum(h) && h !== 0) {
+        const raw = String(d ?? b ?? '').trim();
+        const [desc, ...rest] = raw.split('=');
+        const formula = ex.f('H' + r);
+        u.lines.push({
+          desc: (desc || 'Item').trim().replace(/^\d+\.\s*/, ''),
+          note: [rest.join('=').trim(), e].filter(x => x != null && String(x).trim()).join(' · '),
+          expr: '', prior: r2(h), priorExpr: /^[\d+\-*/().\s]+$/.test(formula) ? formula.replace(/\s/g, '') : '', imp: {},
+        });
+      } else if (text) priorNotes.push(text.trim());
+    }
+    const rowOf = re => ex.find('B', re, totalRow, endRow);
+    const rooms = ex.v('C' + rowOf(/how many rooms\?/i)), work = ex.v('C' + rowOf(/rooms used for work/i));
+    if (isNum(rooms)) { u.totalRooms = String(rooms); u.prior.rooms = String(rooms); }
+    if (isNum(work)) { u.workRooms = String(work); u.prior.workRooms = String(work); }
+    // Personal usage row: column C holds the proportion disallowed, H the amount.
+    const dr = rowOf(/disallowance/i);
+    const disallow = ex.v('C' + dr);
+    const ownsRow = rowOf(/own property/i);
+    const owns = ex.v('C' + ownsRow);
+    if (isNum(disallow) && !/no/i.test(owns || '')) u.prior.timePct = 1 - disallow;
+    // Notes from the time split (often in D/E of those rows).
+    for (let r = totalRow; r <= endRow; r++) {
+      ['D', 'E', 'F'].forEach(c => { const x = ex.v(c + r); if (typeof x === 'string' && x.trim() && !/disallowance necessary/i.test(x)) priorNotes.push(x.trim()); });
+    }
+    const sh = ex.v('C' + rowOf(/share workspace/i));
+    if (sh && /yes/i.test(sh)) { u.shared = true; const p = ex.v('C' + (rowOf(/share workspace/i) + 1)); if (isNum(p)) u.sharedPct = String(p * 100); }
+    const tot = ex.v('H' + endRow);
+    if (isNum(tot)) u.prior.total = r2(tot);
+    u.prior.notes = priorNotes.join('\n');
+    // Hours a week from notes like "average of 30hrs pw".
+    const hm = u.prior.notes.match(/(\d+(?:\.\d+)?)\s*(?:hrs|hours)\s*(?:pw|p\/w|per week|a week)/i);
+    if (hm) u.hours = hm[1];
+    else if (u.prior.timePct != null) u.timePct = String(r2(u.prior.timePct * 100));
+    if (hm && u.prior.timePct != null) {
+      const intended = Math.min(+hm[1] / 10, 7) / 7;
+      if (Math.abs(intended - u.prior.timePct) > 0.005) {
+        notes.push(['warn', `Use of Home: last year's notes say ${hm[1]} hours a week (${pct(intended)} business), but the papers claimed ${pct(u.prior.timePct)} of the cost. This year uses ${pct(intended)}; check which is right.`]);
+      }
+    }
+    notes.push(['ok', `Use of Home: ${u.lines.length} item${u.lines.length !== 1 ? 's' : ''} brought forward, last year's claim ${u.prior.total != null ? fmt(u.prior.total) : 'not found'}.`]);
+  } else notes.push(['warn', 'No Use of Home section found on the Expenses sheet.']);
+
+  // Capital allowances.
+  if (ca.last > 0) {
+    const carTop = ca.find('B', /^car$/i), newTop = ca.find('B', /^new car$/i), mainTop = ca.find('B', /^main pool$/i);
+    const cfIn = (from, to) => { const r = ca.find('B', /^twdv c\/fwd$/i, from, to); return r ? ca.v('C' + r) : undefined; };
+    const usageIn = (from, to) => { const r = ca.find('B', /^personal usage$/i, from, to); return r ? ca.v('C' + r) : undefined; };
+    const rateIn = (from, to) => { const r = ca.find('B', /rate of depreciation/i, from, to); return r ? ca.v('C' + r) : undefined; };
+    const carName = (() => {
+      const r = ex.find('F', /g\/km of the new car/i);
+      const n = r ? ex.v('I' + r) : '';
+      const m = String(n || '').match(/(mercedes|bmw|audi|tesla|ford|vw|volkswagen|toyota|kia|hyundai|nissan|vauxhall|skoda|volvo|polestar|mg|byd)[\w\s-]*/i);
+      return m ? 'Car: ' + m[0].trim() : 'Car';
+    })();
+    const addCar = (desc, cf, usage, rate, note) => {
+      if (!isNum(cf) || cf <= 0) return;
+      const biz = isNum(usage) ? (usage <= 1 ? 1 - usage : 1) : 1;
+      fresh.ca.pools.push({ desc, bf: String(r2(cf)), cost: '', rate: isNum(rate) && rate < 0.1 ? '6' : '18', bizPct: String(r2(biz * 100)), fya: false, disposed: false, proceeds: '', note });
+    };
+    if (carTop) addCar('Car', cfIn(carTop, newTop || mainTop || ca.last), usageIn(carTop, newTop || ca.last), rateIn(carTop, newTop || ca.last), 'Brought forward from last year\'s CA sheet (car).');
+    if (newTop) addCar(carName, cfIn(newTop, mainTop || ca.last), usageIn(newTop, mainTop || ca.last), rateIn(newTop, mainTop || ca.last), 'Bought last year. Brought forward from last year\'s CA sheet (new car).');
+    if (mainTop) { const m = cfIn(mainTop, ca.last); if (isNum(m) && m > 0) fresh.ca.mainBf = String(r2(m)); }
+    const totRow = ca.find('B', /total capital allowances/i);
+    const tot = totRow ? ca.v('D' + totRow) : undefined;
+    if (isNum(tot)) fresh.ca.prior.total = r2(Math.abs(tot));
+    notes.push(['ok', `Capital allowances: ${fresh.ca.pools.length} car pool${fresh.ca.pools.length !== 1 ? 's' : ''} brought forward${fresh.ca.mainBf ? ', main pool ' + fmt(num(fresh.ca.mainBf)) : ''}; last year's claim ${isNum(tot) ? fmt(Math.abs(tot)) : 'not found'}.`]);
+  }
+
+  // Tax sheet totals, read as last year's comparatives.
+  if (tx.last > 0) {
+    const sectionTotal = (re, totalRe = /^total/i) => {
+      const r = tx.find('B', re); if (!r) return undefined;
+      const t = tx.find('B', totalRe, r + 1); return t ? tx.v('H' + t) : undefined;
+    };
+    const p = fresh.tax.prior;
+    const map = {
+      savings: /^savings interest$/i, dividends: /^dividends$/i, property: /^income from land and property$/i,
+      employment: /^salaries - gross$/i, paye: /^salaries - tax paid at source$/i, pensionNet: /^pension contributions/i,
+      pensionIncome: /^pensions received - gross$/i, pensionTax: /^pensions received - tax paid at source$/i,
+      giftAid: /^gift aid donations$/i, other: /^other income$/i,
+    };
+    Object.entries(map).forEach(([k, re]) => { const x = sectionTotal(re); if (isNum(x)) p[k] = r2(x); });
+    const yn = re => { const r = tx.find('B', re); return r ? tx.v('C' + r) : undefined; };
+    const sl = yn(/student loan contributions/i), slType = yn(/which type of student loan/i);
+    if (sl && /yes/i.test(sl)) { fresh.tax.slPlan = /2/.test(slType) ? 'Plan 2' : /post/i.test(slType) ? 'Postgraduate' : /4/.test(slType) ? 'Plan 4' : 'Plan 1'; p.slPlan = fresh.tax.slPlan; }
+    else if (sl) p.slPlan = 'None';
+    const cb = yn(/receive child benefit/i);
+    if (cb) { fresh.tax.cb = /yes/i.test(cb); p.cb = /yes/i.test(cb) ? 'Yes' : 'No'; const k = yn(/how many children/i); if (isNum(k)) fresh.tax.children = String(k); }
+    // Pre-meeting notes in column D, e.g. "£50pm to JW.ORG".
+    const tnotes = [];
+    for (let r = 1; r <= tx.last; r++) { const d = tx.v('D' + r); if (typeof d === 'string' && d.trim() && !/^pre-meeting notes$/i.test(d.trim())) tnotes.push(d.trim()); }
+    p.notes = tnotes.join('\n');
+    // A regular Gift Aid amount carries on unless the client says otherwise.
+    const gaRow = tx.find('B', /^gift aid donations$/i);
+    if (gaRow) { for (let r = gaRow + 1; r < gaRow + 8; r++) { const fx = tx.f('H' + r); if (/^[\d*+.\s]+$/.test(fx)) { fresh.tax.giftAid = fx.replace(/\s/g, ''); break; } } }
+    notes.push(['ok', 'Tax: last year\'s income and reliefs loaded as comparatives' + (fresh.tax.giftAid ? `; Gift Aid of ${fresh.tax.giftAid} carried forward` : '') + '.']);
+  }
+
+  // Profit comparatives from the TB.
+  if (tb.last > 0) {
+    const pp = fresh.profit.prior;
+    const rowB = re => tb.find('B', re);
+    const net = tb.v('D' + rowB(/^net income/i));
+    const uohRow = tb.find('B', /^use of home$/i);
+    const uohTb = uohRow ? tb.v('D' + uohRow) : 0;
+    const caTb = tb.v('D' + rowB(/^capital allowances$/i));
+    const adj = tb.v('D' + rowB(/catching up charges|tax adjustments/i));
+    const taxable = tb.v('D' + rowB(/^taxable income$/i));
+    if (isNum(net)) pp.before = Math.round(net + (isNum(uohTb) ? uohTb : 0));
+    if (isNum(uohTb)) pp.uoh = uohTb;
+    if (isNum(caTb)) pp.ca = Math.abs(caTb);
+    if (isNum(adj)) pp.adjustments = adj;
+    if (isNum(taxable)) pp.taxable = taxable;
+  }
+
+  S = fresh;
+  notes.reverse().forEach(([c, m]) => logMsg(c, m));
+  logMsg('ok', `${name}: last year's working papers for ${S.client.name || 'the client'} loaded. This year set to ${S.client.taxYear}.`);
+  toast('Last year\'s working papers loaded.');
+}
+
+// ── This tool's own export ─────────────────────────────────────────────────
+function importOwnExport(name, wb) {
+  const ws = wb.Sheets.YE_DATA;
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+  const data = JSON.parse(rows.map(r => r[0] || '').join(''));
+  const last = mergeDeep(blankState(), data);
+  if (last.client.taxYear === S.client.taxYear && (!S.client.name || S.client.name === last.client.name)) {
+    S = last;
+    logMsg('ok', `${name}: reopened ${S.client.name}'s ${S.client.taxYear} workings.`);
+    toast('Workings reopened.');
+    return;
+  }
+  S = rollForward(last);
+  logMsg('ok', `${name}: rolled ${last.client.taxYear} forward to ${S.client.taxYear}. Last year's figures are now the comparatives.`);
+  toast('Rolled forward from last year.');
+}
+
+function rollForward(last) {
+  const C = compute(last);
+  const n = blankState();
+  n.imp.uohCode = last.imp.uohCode; n.imp.inPeriodOnly = last.imp.inPeriodOnly;
+  const addYear = s => { const d = new Date(s); if (isNaN(d)) return s; d.setFullYear(d.getFullYear() + 1); return ymd(d); };
+  n.client = { ...last.client, taxYear: nextTaxYear(last.client.taxYear), start: addYear(last.client.start), end: addYear(last.client.end) };
+  // Use of Home: same items and splits; this year's amounts start empty.
+  const u = n.uoh, lu = last.uoh;
+  u.lines = lu.lines.map(l => ({ desc: l.desc, note: l.note, expr: '', prior: r2(lineAmount(l)), priorExpr: has(l.expr) && /[*+]/.test(l.expr) ? l.expr : '', imp: {} }));
+  Object.assign(u, { method: lu.method, totalRooms: lu.totalRooms, workRooms: lu.workRooms, hours: lu.hours, timePct: lu.timePct, shared: lu.shared, sharedPct: lu.sharedPct, flatHours: lu.flatHours, flatMonths: lu.flatMonths });
+  u.prior = { total: r2(C.uoh.claim), notes: lu.notes, rooms: lu.totalRooms, workRooms: lu.workRooms, timePct: C.uoh.timeFrac, method: lu.method };
+  // Capital allowances: carried forward becomes brought forward; disposed assets drop out.
+  n.ca.mainBf = C.ca.main.cf ? String(C.ca.main.cf) : '';
+  n.ca.srBf = C.ca.sr.cf ? String(C.ca.sr.cf) : '';
+  n.ca.mainAia = last.ca.mainAia;
+  n.ca.pools = last.ca.pools.map((p, i) => ({ p, c: C.ca.pools[i] })).filter(({ p }) => !p.disposed)
+    .map(({ p, c }) => ({ desc: p.desc, bf: String(c.cf), cost: '', rate: p.rate, bizPct: p.bizPct, fya: false, disposed: false, proceeds: '', note: '' }));
+  n.ca.prior.total = C.ca.total;
+  // Tax: keep the settings, move amounts to last year.
+  TAX_ROWS.forEach(([k]) => { if (has(last.tax[k])) n.tax.prior[k] = r2(num(last.tax[k])); });
+  Object.assign(n.tax, { slPlan: last.tax.slPlan, cb: last.tax.cb, children: last.tax.children, cbWeeks: last.tax.cbWeeks });
+  if (has(last.tax.giftAid)) n.tax.giftAid = last.tax.giftAid;
+  n.tax.prior.slPlan = last.tax.slPlan; n.tax.prior.cb = last.tax.cb ? 'Yes' : 'No'; n.tax.prior.notes = last.tax.notes;
+  n.tax.poaPaid = C.tax.poa ? String(r2(C.tax.poa * 2)) : '';
+  n.profit.prior = { before: num(last.profit.before), uoh: C.uoh.figure, ca: C.ca.figure, adjustments: num(last.profit.adjustments), taxable: C.taxable };
+  return n;
+}
+
+// ── Extraction Tool exports and Xero reports ───────────────────────────────
+function parseCsv(text) {
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cur); cur = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += ch;
+  }
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+const normH = c => String(c || '').replace(/[*\s]/g, '').toLowerCase();
+function parseDate(s) {
+  s = String(s || '').trim();
+  let m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  if (m) return new Date(+(m[3].length === 2 ? '20' + m[3] : m[3]), +m[2] - 1, +m[1]);
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  const d = new Date(s); return isNaN(d) ? null : d;
+}
+function inPeriod(d) {
+  if (!S.imp.inPeriodOnly || !d) return true;
+  const a = parseDate(S.client.start), b = parseDate(S.client.end);
+  return (!a || d >= a) && (!b || d <= b);
+}
+const isUohName = n => /use of home|home as (an )?office|home office|working from home/i.test(n || '');
+
+function importCsv(name, text) {
+  const rows = parseCsv(text.replace(/^﻿/, ''));
+  const hi = rows.findIndex(r => r.some(c => normH(c) === 'date' || normH(c) === 'invoicedate'));
+  if (hi < 0) { logMsg('warn', `${name}: not a file this tool recognises.`); return; }
+  const head = rows[hi].map(normH);
+  const c = n => head.indexOf(n);
+  const body = rows.slice(hi + 1);
+
+  // Xero Account Transactions: account names are section headings.
+  if (c('source') >= 0 && (c('gross') >= 0 || c('debit') >= 0)) return importXeroTransactions(name, head, body);
+
+  const isBank = c('payee') >= 0 && c('accountcode') >= 0 && c('amount') >= 0;
+  const isBills = c('contactname') >= 0 && c('accountcode') >= 0 && c('unitamount') >= 0;
+  if (!isBank && !isBills) { logMsg('warn', `${name}: no Account Code column, so Use of Home lines can't be picked out.`); return; }
+  const code = String(S.imp.uohCode || '').trim();
+  if (!code) { logMsg('warn', `${name}: enter the Use of Home account code above (or drop in the Extraction Tool backup), then drop this file in again.`); return; }
+  const items = []; let outside = 0;
+  body.forEach(r => {
+    if (String(r[c('accountcode')] || '').trim() !== code) return;
+    const d = parseDate(r[c(isBank ? 'date' : 'invoicedate')]);
+    if (!inPeriod(d)) { outside++; return; }
+    const amt = isBank ? -num(r[c('amount')]) : num(r[c('unitamount')]) * (num(r[c('quantity')]) || 1);
+    const who = isBank ? r[c('payee')] : r[c('contactname')];
+    const desc = r[c('description')] || '';
+    items.push({ who, desc, amt });
+  });
+  addUohImports(name, items, outside);
+}
+
+function importXeroTransactions(name, head, body) {
+  const c = n => head.indexOf(n);
+  const items = []; let heading = null, outside = 0, roomsNote = '';
+  body.forEach(r => {
+    const cells = r.map(x => String(x ?? '').trim()); const filled = cells.filter(Boolean);
+    if (!filled.length) return;
+    if (cells[0] && filled.length === 1) { heading = /^total\b/i.test(cells[0]) ? null : cells[0]; return; }
+    if (!heading || !isUohName(heading)) return;
+    const d = parseDate(cells[c('date')]);
+    if (!inPeriod(d)) { outside++; return; }
+    const amt = c('gross') >= 0 ? num(cells[c('gross')]) : num(cells[c('debit')]) - num(cells[c('credit')]);
+    const desc = c('description') >= 0 ? cells[c('description')] : '';
+    const source = c('source') >= 0 ? cells[c('source')] : '';
+    if (/manual journal/i.test(source) && amt < 0) {
+      const m = desc.match(/(\d+)\s*of\s*(\d+)\s*rooms?/i);
+      if (m) { roomsNote = m[0]; if (!has(S.uoh.workRooms)) S.uoh.workRooms = m[1]; if (!has(S.uoh.totalRooms)) S.uoh.totalRooms = m[2]; }
+      return; // business-use adjustments are worked out here instead
+    }
+    const code = c('accountcode') >= 0 ? cells[c('accountcode')] : '';
+    if (code && !S.imp.uohCode) S.imp.uohCode = code;
+    items.push({ who: c('contact') >= 0 ? cells[c('contact')] : '', desc, amt });
+  });
+  if (roomsNote) logMsg('ok', `${name}: Xero adjustment "${roomsNote}" used for the work space split.`);
+  if (!items.length) { logMsg('warn', `${name}: no Use of Home account found in this Xero export.`); return; }
+  addUohImports(name, items, outside);
+}
+
+function addUohImports(name, items, outside) {
+  if (!items.length) { logMsg('warn', `${name}: no lines coded to account ${S.imp.uohCode}${outside ? ` inside the period (${outside} outside)` : ''}.`); return; }
+  // Clear this file's earlier contribution so dropping it in twice doesn't double up.
+  S.uoh.lines.forEach(l => { if (l.imp) delete l.imp[name]; });
+  const groups = new Map();
+  items.forEach(it => {
+    const text = `${it.who} ${it.desc}`;
+    const key = categoryOf(text) || String(it.who || it.desc || 'Other').trim();
+    groups.set(key, r2((groups.get(key) || 0) + it.amt));
+  });
+  let matched = 0, added = 0;
+  groups.forEach((amt, key) => {
+    const line = S.uoh.lines.find(l => (categoryOf(`${l.desc} ${l.note}`) || l.desc.trim()) === key);
+    if (line) { (line.imp ||= {})[name] = amt; matched++; }
+    else { S.uoh.lines.push({ desc: key, note: '', expr: '', prior: null, imp: { [name]: amt } }); added++; }
+  });
+  const total = items.reduce((a, b) => a + b.amt, 0);
+  logMsg('ok', `${name}: ${items.length} Use of Home line${items.length !== 1 ? 's' : ''}, ${fmt(total)}. ${matched} matched to last year's items, ${added} new.${outside ? ` ${outside} outside the period left out.` : ''}`);
+}
+
+function importBackup(name, data) {
+  const docs = data && (data.docs || data);
+  if (!docs || typeof docs !== 'object') { logMsg('warn', `${name}: not an Extraction Tool backup.`); return; }
+  const clients = Object.values(docs).filter(d => d && typeof d === 'object' && d.coa && Array.isArray(d.coa.accounts));
+  const want = String(S.client.name || '').toLowerCase().trim();
+  const match = clients.find(d => String(d.name || '').toLowerCase().trim() === want)
+    || clients.find(d => want && String(d.name || '').toLowerCase().includes(want.split(' ')[0]));
+  if (!match) { logMsg('warn', `${name}: no client called "${S.client.name || '?'}" in this backup (${clients.length} client${clients.length !== 1 ? 's' : ''}). Set the client name first.`); return; }
+  const acc = match.coa.accounts.find(a => isUohName(a.name));
+  if (acc) { S.imp.uohCode = String(acc.code); logMsg('ok', `${name}: ${match.name}'s Use of Home account is ${acc.code} - ${acc.name}.`); }
+  else logMsg('warn', `${name}: ${match.name} has no Use of Home account in the backup.`);
+  (match.adjustments || []).filter(a => isUohName(a.account)).forEach(a => {
+    const m = String(a.description || '').match(/(\d+)\s*of\s*(\d+)\s*rooms?/i);
+    if (m && !has(S.uoh.totalRooms)) { S.uoh.workRooms = m[1]; S.uoh.totalRooms = m[2]; logMsg('ok', `Rooms taken from the Xero adjustment "${a.description}".`); }
+  });
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────
+function exportFileName() {
+  const initials = String(S.client.name || 'Client').split(/\s+/).filter(Boolean).map(w => w[0].toUpperCase()).join('');
+  return `${initials || 'Client'}_YE_${String(S.client.taxYear).replace('/', '-')}.xlsx`;
+}
+function sheetFrom(aoa, widths) {
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let R = range.s.r; R <= range.e.r; R++) for (let Cc = range.s.c; Cc <= range.e.c; Cc++) {
+    const cell = ws[XLSX.utils.encode_cell({ r: R, c: Cc })];
+    if (cell && cell.t === 'n' && !cell.z) cell.z = '#,##0.00;[Red]-#,##0.00';
+  }
+  ws['!cols'] = widths.map(w => ({ wch: w }));
+  return ws;
+}
+$('#exportBtn').onclick = () => {
+  const C = compute(); const { uoh, ca, tax } = C;
+  const P = S.uoh.prior, PP = S.profit.prior;
+  const head = [[S.client.name || 'Client'], [`Tax year ${S.client.taxYear} · ${S.client.start} to ${S.client.end} · ${S.client.basis}`], []];
+  const val = x => (x == null || x === '' ? '' : x);
+  const pc = x => ({ t: 'n', v: x, z: '0.00%' });
+
+  const summary = [...head,
+    ['', 'This year', 'Last year'],
+    ['Net profit before Use of Home and capital allowances', num(S.profit.before), val(PP.before)],
+    ['Use of Home', -uoh.figure, PP.uoh != null ? -PP.uoh : ''],
+    ['Capital allowances', -ca.figure, PP.ca != null ? -PP.ca : ''],
+    ['Tax adjustments', num(S.profit.adjustments), val(PP.adjustments)],
+    ['Taxable trading profit', C.taxable, val(PP.taxable)],
+    [],
+    ['Income tax', tax.it], ['Class 4 NI', tax.c4], ['Student loan', tax.sl], ['High Income Child Benefit Charge', tax.hicbc],
+    ['Total liability', tax.liability],
+    ['Less: tax deducted at source', -tax.atSource],
+    ['Less: payments on account made', -num(S.tax.poaPaid)],
+    [`Balancing payment 31 Jan ${tax.endYear + 1}`, tax.balancing],
+    [`1st payment on account 31 Jan ${tax.endYear + 1}`, tax.poa],
+    [`Total due 31 Jan ${tax.endYear + 1}`, tax.janTotal],
+    [`2nd payment on account 31 Jul ${tax.endYear + 1}`, tax.poa],
+  ];
+
+  const uohSheet = [...head, ['USE OF HOME', '', 'This year', 'Last year'], ['Item', 'Notes', '', '']];
+  S.uoh.lines.forEach(l => uohSheet.push([l.desc, [l.note, has(l.expr) && /[*+]/.test(l.expr) ? `(${l.expr})` : '', Object.keys(l.imp || {}).length && !has(l.expr) ? 'from ' + Object.keys(l.imp).join(', ') : ''].filter(Boolean).join(' · '), r2(lineAmount(l)), val(l.prior)]));
+  uohSheet.push(['Total - running costs paid', '', uoh.total, S.uoh.lines.reduce((a, l) => a + (l.prior || 0), 0) || '']);
+  uohSheet.push([]);
+  uohSheet.push(['Work space proportion', `${num(S.uoh.workRooms) || '-'} of ${num(S.uoh.totalRooms) || '-'} rooms`, pc(uoh.roomFrac)]);
+  uohSheet.push(['Proportion to be disallowed', '', -r2(uoh.total - uoh.afterRooms)]);
+  uohSheet.push(['Subtotal', '', r2(uoh.afterRooms)]);
+  uohSheet.push(['Time used for work', uoh.timeText, pc(uoh.timeFrac)]);
+  uohSheet.push(['Personal usage disallowed', '', -r2(uoh.afterRooms - uoh.afterTime)]);
+  uohSheet.push(['Subtotal', '', r2(uoh.afterTime)]);
+  uohSheet.push(['Shared workspace', S.uoh.shared ? `Disallow ${pct(uoh.shareFrac)}` : 'No', -r2(uoh.afterTime - uoh.actual)]);
+  uohSheet.push(['Actual costs claim', '', r2(uoh.actual)]);
+  uohSheet.push(['HMRC flat rate claim', `${fmt0(uoh.flatRate)} a month × ${num(S.uoh.flatMonths)} months`, uoh.flat]);
+  uohSheet.push(['Method claimed', S.uoh.method === 'flat' ? 'HMRC flat rate' : 'Actual costs']);
+  uohSheet.push(['TOTAL - FIGURE FOR ACCOUNTS', '', uoh.figure, val(P.total)]);
+  uohSheet.push([]);
+  uohSheet.push(['Notes', S.uoh.notes || '']);
+  if (P.notes) uohSheet.push(["Last year's notes", P.notes]);
+
+  const caSheet = [...head, ['CAPITAL ALLOWANCES'], ['Pool', 'TWDV b/fwd', 'Additions', 'AIA / FYA', 'Disposals', 'WDA / balancing', 'TWDV c/fwd', 'Business %', 'Allowance claimed']];
+  const caLine = (n, p) => caSheet.push([n, p.bf, p.add, -p.aia, -p.disp, -p.wda, p.cf, pc(p.biz), p.claim]);
+  caLine('Main pool (18%)', ca.main); caLine('Special rate pool (6%)', ca.sr);
+  ca.pools.forEach((p, i) => caLine(`${S.ca.pools[i].desc} (${S.ca.pools[i].fya ? 'FYA, ' : ''}${S.ca.pools[i].rate}%${S.ca.pools[i].disposed ? ', disposed' : ''})`, p));
+  caSheet.push(['TOTAL CAPITAL ALLOWANCES', '', '', '', '', '', '', '', ca.total]);
+  caSheet.push(['Last year', '', '', '', '', '', '', '', val(S.ca.prior.total)]);
+  caSheet.push([]); caSheet.push(['Notes', S.ca.notes || '']);
+
+  const taxSheet = [...head, ['TAX', 'This year', 'Last year'], ['Taxable trading profit', C.taxable, val(PP.taxable)]];
+  TAX_ROWS.forEach(([k, label]) => taxSheet.push([label, num(S.tax[k]), val(S.tax.prior[k])]));
+  taxSheet.push(['Student loan', S.tax.slPlan, val(S.tax.prior.slPlan)]);
+  taxSheet.push(['Child Benefit', S.tax.cb ? `Yes, ${S.tax.children} child(ren), ${S.tax.cbWeeks} weeks` : 'No', val(S.tax.prior.cb)]);
+  taxSheet.push([]);
+  taxSheet.push(['TAX ESTIMATE ' + S.client.taxYear]);
+  taxSheet.push(['Total income', tax.totalIncome]); taxSheet.push(['Personal allowance', -Math.min(tax.pa, tax.totalIncome)]);
+  taxSheet.push(['Adjusted net income', tax.ani]); taxSheet.push(['Taxable income', tax.taxable]);
+  tax.lines.forEach(([l, v]) => taxSheet.push([l, r2(v)]));
+  taxSheet.push(['Income tax', tax.it]); taxSheet.push(['Class 4 NI', tax.c4]);
+  taxSheet.push(['Student loan', tax.sl]); taxSheet.push(['High Income Child Benefit Charge', tax.hicbc]);
+  taxSheet.push(['Total liability', tax.liability]);
+  taxSheet.push([]); taxSheet.push(['Notes', S.tax.notes || '']);
+  if (S.tax.prior.notes) taxSheet.push(["Last year's notes", S.tax.prior.notes]);
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheetFrom(summary, [52, 14, 14]), 'Summary');
+  XLSX.utils.book_append_sheet(wb, sheetFrom(uohSheet, [34, 60, 14, 14]), 'Use of Home');
+  XLSX.utils.book_append_sheet(wb, sheetFrom(caSheet, [40, 13, 13, 13, 13, 15, 13, 11, 16]), 'CA');
+  XLSX.utils.book_append_sheet(wb, sheetFrom(taxSheet, [56, 16, 16]), 'Tax');
+  // The full workings, so the file can be dropped back in. Cells hold at most 32,767 characters.
+  const json = JSON.stringify({ ...S, imp: { ...S.imp, log: [] } });
+  const chunks = []; for (let i = 0; i < json.length; i += 30000) chunks.push([json.slice(i, i + 30000)]);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(chunks), 'YE_DATA');
+  wb.Workbook = { Sheets: wb.SheetNames.map(n => ({ name: n, Hidden: n === 'YE_DATA' ? 1 : 0 })) };
+  XLSX.writeFile(wb, exportFileName());
+  toast('Downloaded ' + exportFileName());
+};
+
+// ── Start ──────────────────────────────────────────────────────────────────
+renderLists();
+refresh();
+try { const t = sessionStorage.getItem('yearEnd:tab'); if (t) showTab(t); } catch (_) {}
+</script>
+</body>
+</html>
