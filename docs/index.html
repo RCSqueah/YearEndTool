@@ -670,6 +670,14 @@ const isSum = s => has(s) && /[*+\/()]|.-/.test(String(s).replace(/^-/, ''));
 
 // ── Tax years ──────────────────────────────────────────────────────────────
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// Dates are calendar days. "2026-04-05" read with new Date() means midnight
+// UTC, which is 4 April in time zones west of the UK, so build them locally.
+function dayOf(v) {
+  if (v instanceof Date) return isNaN(v) ? null : new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+}
+const ukDate = v => { const d = dayOf(v); return d ? d.toLocaleDateString('en-GB') : ''; };
 function nextTaxYear(ty) { const a = Number(String(ty).slice(0, 4)); return `${a + 1}/${String(a + 2).slice(2)}`; }
 // Accounts ending 31 March to 5 April fall in the tax year ending that April.
 function taxYearOfEnd(d) { const y = d.getFullYear(); const before = d.getMonth() < 3 || (d.getMonth() === 3 && d.getDate() <= 5); const a = before ? y - 1 : y; return `${a}/${String(a + 1).slice(2)}`; }
@@ -881,7 +889,7 @@ function returnRows(st = S, C = compute(st)) {
 
   const turnover = num(st.profit.turnover);
   group(`Self-employment: ${turnover > 90000 ? 'SA103F (full)' : 'SA103S (short)'}`);
-  add('SA103', '', 'Date the books are made up to', st.client.end ? new Date(st.client.end).toLocaleDateString('en-GB') : '');
+  add('SA103', '', 'Date the books are made up to', ukDate(st.client.end));
   add('SA103', '', 'Cash basis used', st.client.basis === 'Cash basis' ? 'Yes' : 'No');
   add('SA103', '', 'Turnover', turnover, PP.turnover);
   add('SA103', '', 'Any other business income', num(st.profit.otherIncome), PP.otherIncome);
@@ -990,8 +998,8 @@ function onField(e) {
   if (!el.dataset || !el.dataset.bind) return;
   setPath(S, el.dataset.bind, el.type === 'checkbox' ? el.checked : el.value);
   if (el.dataset.after === 'periodEnd' && e.type === 'change') {
-    const d = new Date(el.value);
-    if (!isNaN(d)) { S.client.taxYear = taxYearOfEnd(d); bindAll(); renderRates(); }
+    const d = dayOf(el.value);
+    if (d) { S.client.taxYear = taxYearOfEnd(d); bindAll(); renderRates(); }
   }
   if (el.id === 'f-year' && e.type === 'change') renderRates();
   if (el.dataset.bind.startsWith('email.') && el.id !== 'em-subject') renderEmail();
@@ -1296,7 +1304,7 @@ const SIG_KEY = 'yearEnd:signature';
 const DEFAULT_SIG = 'Stephen Queah\nReliable Client Solutions';
 function signature() { try { return localStorage.getItem(SIG_KEY) ?? DEFAULT_SIG; } catch (_) { return DEFAULT_SIG; } }
 const fmtM = x => Number.isInteger(r2(x)) ? fmt0(x) : fmt(x);
-const longDate = d => { const x = new Date(d); return isNaN(x) ? '' : x.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); };
+const longDate = d => { const x = dayOf(d); return x ? x.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''; };
 const listText = a => a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
 const cap = t => { t = String(t || '').trim(); return t ? t[0].toUpperCase() + t.slice(1) : t; };
 // A line's own name, unless it's just the section's name ("Gift Aid", "Interest").
@@ -1572,7 +1580,7 @@ async function handleFiles(files) {
       if (/\.json$/i.test(f.name)) importBackup(f.name, JSON.parse(await f.text()));
       else if (/\.csv$/i.test(f.name)) importCsv(f.name, await f.text());
       else {
-        const wb = XLSX.read(await f.arrayBuffer(), { cellDates: true });
+        const wb = XLSX.read(await f.arrayBuffer());
         if (wb.SheetNames.includes('YE_DATA')) importOwnExport(f.name, wb);
         else if (wb.SheetNames.some(n => /^expenses$/i.test(n)) || wb.SheetNames.some(n => /^CA$/i.test(n))) importWorkingPapers(f.name, wb);
         else importCsv(f.name, XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]));
@@ -1614,8 +1622,11 @@ function importWorkingPapers(name, wb) {
   // Client and period: the papers are last year's, so this year starts the day after.
   const client = chk.v('D3');
   if (client) fresh.client.name = String(client).trim();
-  const end = chk.v('D5');
-  if (end instanceof Date) {
+  // Excel stores dates as day numbers; turn them into calendar days directly.
+  const endRaw = chk.v('D5');
+  const endCode = typeof endRaw === 'number' ? XLSX.SSF.parse_date_code(endRaw) : null;
+  const end = endCode ? new Date(endCode.y, endCode.m - 1, endCode.d) : dayOf(endRaw);
+  if (end) {
     const s = new Date(end); s.setDate(s.getDate() + 1);
     const e = new Date(end); e.setFullYear(e.getFullYear() + 1);
     fresh.client.start = ymd(s); fresh.client.end = ymd(e);
@@ -1823,7 +1834,7 @@ function rollForward(last) {
   const C = compute(last);
   const n = blankState();
   n.imp.uohCode = last.imp.uohCode; n.imp.inPeriodOnly = last.imp.inPeriodOnly;
-  const addYear = s => { const d = new Date(s); if (isNaN(d)) return s; d.setFullYear(d.getFullYear() + 1); return ymd(d); };
+  const addYear = s => { const d = dayOf(s); if (!d) return s; d.setFullYear(d.getFullYear() + 1); return ymd(d); };
   n.client = { ...last.client, taxYear: nextTaxYear(last.client.taxYear), start: addYear(last.client.start), end: addYear(last.client.end) };
   // Use of Home: same items and splits; this year's amounts start empty.
   const u = n.uoh, lu = last.uoh;
@@ -2121,8 +2132,7 @@ function summarySheet(C, head) {
 //    for a balancing charge), worded like the firm's own journals.
 function journalLines(C = compute()) {
   const J = S.journal || {}, u = C.uoh, ty = S.client.taxYear;
-  const d = has(J.date) ? new Date(J.date) : new Date(S.client.end);
-  const date = isNaN(d) ? '' : d.toLocaleDateString('en-GB');
+  const date = ukDate(has(J.date) ? J.date : S.client.end);
   const clear = String(J.clearCode || '990').trim();
   const journals = [];
   const close = (narration, lines) => {
