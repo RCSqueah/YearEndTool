@@ -25,7 +25,9 @@ It is a single web page with no server, hosted free on **GitHub Pages**, like th
 - **Tax**: laid out as the return asks for it. Self-employment (SA103), employments (SA102), interest and dividends by account, pensions, UK property (SA105), other income, pension contributions and Gift Aid by charity. Every section takes as many lines as needed, each with its own notes and last year's figure. The tab also covers student loan, the High Income Child Benefit Charge, Class 4 NI and payments on account.
 - **Tax return**: the figures to enter, by page and box number.
 - **Removed lines**: removing a line shows an Undo button, and recently removed lines can be restored from the list under each table.
-- **Export**: one Excel workbook with Summary, Use of Home, CA, Tax and Tax return sheets. The full workings are kept in a hidden sheet, so next year you drop the file back in to roll forward.
+- **Export**: two downloads.
+  - **Excel workbook** with Summary, Use of Home, CA, Tax and Tax return sheets. The Summary sheet has the profit, the other income and reliefs, the year's rates and the tax calculation as Excel formulas, so typing a different trading profit into it updates the tax. The full workings are kept in a hidden sheet, so next year you drop the file back in to roll forward.
+  - **Xero manual journal CSV** for the Use of Home. Each cost item's business share is debited to account 300, and the balancing credit goes to 990 (clearing). Both codes, the date and the tax rate can be changed on the Export tab. Import it in Xero under Accounting → Manual journals → Import.
 
 Work in progress is saved in the browser as you type. The exported workbook is the copy to keep with the client's file.
 

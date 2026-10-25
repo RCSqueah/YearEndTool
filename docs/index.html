@@ -219,7 +219,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
       </div>
     </div>
     <div class="fields">
-      <label class="field"><span>Use of Home account code</span><input id="f-uohcode" data-bind="imp.uohCode" placeholder="e.g. 213"><span class="hint">Used for Bank and Bills CSVs. Found automatically from a backup or Xero export.</span></label>
+      <label class="field"><span>Use of Home account code</span><input id="f-uohcode" data-bind="imp.uohCode" placeholder="e.g. 300"><span class="hint">Used for Bank and Bills CSVs. Found automatically from a backup or Xero export.</span></label>
       <label class="check"><input type="checkbox" id="f-inperiod" data-bind="imp.inPeriodOnly"> Only take lines dated inside the period</label>
     </div>
     <ul class="log" id="log"></ul>
@@ -374,6 +374,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
           <tr><td>Any other business income</td><td class="n"><input class="num" id="p-other" data-bind="profit.otherIncome" inputmode="decimal"></td><td class="n" data-out="ppOther"></td></tr>
           <tr><td>Allowable expenses, excluding Use of Home</td><td class="n"><input class="num" id="p-exp" data-bind="profit.expenses" inputmode="decimal"></td><td class="n" data-out="ppExpenses"></td></tr>
           <tr><td>Use of Home</td><td class="n" data-out="pUoh"></td><td class="n" data-out="ppUoh"></td></tr>
+          <tr><td>Or net profit per the accounts, after Use of Home<div class="small muted">Fill in to use this figure instead of the lines above</div></td><td class="n"><input class="num" id="p-netov" data-bind="profit.netOverride" inputmode="decimal"></td><td class="n"></td></tr>
           <tr class="total"><td>Net profit</td><td class="n" data-out="pNet"></td><td class="n" data-out="ppNet"></td></tr>
           <tr><td>Less: capital allowances</td><td class="n" data-out="pCa"></td><td class="n" data-out="ppCa"></td></tr>
           <tr><td>Tax adjustments (+ add back, − deduct)</td><td class="n"><input class="num" id="p-adj" data-bind="profit.adjustments" inputmode="decimal"></td><td class="n" data-out="ppAdj"></td></tr>
@@ -426,8 +427,19 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
 <div data-pane="export" hidden>
   <section class="panel">
     <div class="panel-head"><h2>Export</h2></div>
-    <p>Downloads one Excel workbook with Summary, Use of Home, CA, Tax and Tax return sheets. Drop it back in next year to roll everything forward, or this year to carry on editing.</p>
+    <p>One Excel workbook with Summary, Use of Home, CA, Tax and Tax return sheets. The Summary sheet works out the tax with formulas, so you can type in a different trading profit there. Drop the workbook back in next year to roll everything forward, or this year to carry on editing.</p>
     <div class="row-actions"><button class="btn primary" type="button" id="exportBtn">↓ Download Excel workbook</button><span class="muted small" data-out="exportName"></span></div>
+  </section>
+  <section class="panel" style="margin-top:18px;">
+    <div class="panel-head"><div><h2>Xero manual journal: Use of Home</h2><p class="muted small">A CSV for Xero → Accounting → Manual journals → Import. Debits Use of Home, with the balancing credit to the clearing account.</p></div></div>
+    <div class="fields">
+      <label class="field"><span>Use of Home account code</span><input id="j-uoh" data-bind="journal.uohCode"></label>
+      <label class="field"><span>Balancing account code</span><input id="j-clear" data-bind="journal.clearCode"></label>
+      <label class="field"><span>Journal date</span><input id="j-date" type="date" data-bind="journal.date"><span class="hint">Blank uses the period end</span></label>
+      <label class="field"><span>Tax rate</span><input id="j-tax" data-bind="journal.taxRate"><span class="hint">As named in Xero</span></label>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Account</th><th>Description</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead><tbody id="journalTable"></tbody></table></div>
+    <div class="row-actions"><button class="btn primary" type="button" id="journalBtn">↓ Download Xero journal CSV</button><span class="muted small" data-out="journalName"></span></div>
   </section>
 </div>
 
@@ -516,7 +528,8 @@ function blankState() {
     v: 2,
     client: { name: '', taxYear: '2025/26', start: '2025-04-06', end: '2026-04-05', basis: 'Cash basis' },
     imp: { uohCode: '', inPeriodOnly: true, log: [] },
-    profit: { turnover: '', otherIncome: '', expenses: '', adjustments: '', prior: {} },
+    profit: { turnover: '', otherIncome: '', expenses: '', netOverride: '', adjustments: '', prior: {} },
+    journal: { uohCode: '300', clearCode: '990', date: '', taxRate: 'No VAT' },
     uoh: {
       method: 'actual', lines: [], totalRooms: '', workRooms: '', timeMode: 'hours', hours: '', days: '', timePct: '',
       shared: false, sharedPct: '50', flatHours: '', flatMonths: '12', notes: '',
@@ -791,7 +804,7 @@ function calcTax(st = S, trading) {
 
 function profitFigures(st, uohFigure, caFigure) {
   const p = st.profit;
-  const net = r2(num(p.turnover) + num(p.otherIncome) - num(p.expenses) - uohFigure);
+  const net = has(p.netOverride) ? r2(num(p.netOverride)) : r2(num(p.turnover) + num(p.otherIncome) - num(p.expenses) - uohFigure);
   return { net, taxable: r2(net - caFigure + num(p.adjustments)) };
 }
 function compute(st = S) {
@@ -816,7 +829,8 @@ function returnRows(st = S, C = compute(st)) {
   add('SA103', '', 'Cash basis used', st.client.basis === 'Cash basis' ? 'Yes' : 'No');
   add('SA103', '', 'Turnover', turnover, PP.turnover);
   add('SA103', '', 'Any other business income', num(st.profit.otherIncome), PP.otherIncome);
-  add('SA103', '', 'Total allowable expenses (including Use of Home)', r2(num(st.profit.expenses) + C.uoh.figure), PP.expenses != null ? r2(PP.expenses + (PP.uoh || 0)) : null);
+  const totalExp = has(st.profit.netOverride) ? (turnover ? r2(turnover + num(st.profit.otherIncome) - C.net) : '') : r2(num(st.profit.expenses) + C.uoh.figure);
+  add('SA103', '', 'Total allowable expenses (including Use of Home)', totalExp, PP.expenses != null ? r2(PP.expenses + (PP.uoh || 0)) : null);
   add('SA103', '', C.net < 0 ? 'Net loss' : 'Net profit', C.net, ppNet);
   if (sp.aia) add('SA103', '', 'Annual Investment Allowance', sp.aia);
   if (sp.small) add('SA103', '', 'Allowance for small balance of unrelieved expenditure', sp.small);
@@ -1206,6 +1220,10 @@ function refresh() {
     : `<tr><td class="box">${esc(page)}</td><td class="box">${esc(box)}</td><td>${esc(entry)}</td><td class="n">${cell(now)}</td><td class="n muted">${cell(prior)}</td></tr>`).join('');
 
   out('exportName', esc(exportFileName()));
+  const J = journalLines(C);
+  $('#journalTable').innerHTML = J.lines.map(l => `<tr><td>${esc(J.date)}</td><td>${esc(l.code)}</td><td>${esc(l.desc)}</td><td class="n">${l.amount > 0 ? fmt(l.amount) : ''}</td><td class="n">${l.amount < 0 ? fmt(-l.amount) : ''}</td></tr>`).join('')
+    || '<tr><td colspan="5" class="muted">No Use of Home figure to post yet.</td></tr>';
+  out('journalName', J.lines.length ? esc(journalFileName()) : '');
   renderLog();
   save();
 }
@@ -1440,7 +1458,7 @@ function importWorkingPapers(name, wb) {
       if (cost || cf) {
         rows.push({ name: label, bf: 0, add: cost, aia: 0, disp: 0, wdaShown: wda, cf, biz, claim });
         fresh.ca.pools.push({ kind: 'car', desc: label, bf: String(r2(cf)), cost: '', rate: isNum(rate) && rate < 0.1 ? '6' : '18', bizPct: String(r2(biz * 100)), fya: false, disposed: false, proceeds: '',
-          note: `Bought last year for ${fmt(cost)}${isNum(rate) ? `, claimed at ${pct(rate)}` : ''}. Last year's papers treated it as a car; change the type if it's a van.` });
+          note: `Bought last year for ${fmt(cost)}${isNum(rate) ? `, claimed at ${pct(rate)} writing down allowance` : ''}.` });
       }
     }
     if (mainTop) {
@@ -1726,6 +1744,172 @@ function sheetFrom(aoa, widths) {
   ws['!cols'] = widths.map(w => ({ wch: w }));
   return ws;
 }
+// Summary sheet: profit, other income, the rates and a tax calculation written
+// as Excel formulas, so a different trading profit can be typed in. Each
+// formula is also worked out here, so the file opens showing its values.
+function summarySheet(C, head) {
+  const T = C.tax, R = T.R, PP = S.profit.prior, ty = S.client.taxYear, ey = T.endYear + 1;
+  const rows = [];
+  const sec = title => rows.push({ title });
+  const cell = (key, label, val, prior, note, z) => rows.push({ key, label, val, prior, note, z });
+  const P = '0.00%';
+  const slKey = { 'Plan 1': 'slPlan1', 'Plan 2': 'slPlan2', 'Plan 4': 'slPlan4', 'Plan 5': 'slPlan5', 'Postgraduate': 'slPG' }[S.tax.slPlan];
+
+  sec('PROFIT');
+  cell('turnover', 'Turnover', num(S.profit.turnover), PP.turnover);
+  cell('otherInc', 'Any other business income', num(S.profit.otherIncome), PP.otherIncome);
+  cell('expenses', 'Allowable expenses, excluding Use of Home', num(S.profit.expenses), PP.expenses);
+  cell('uoh', 'Use of Home', C.uoh.figure, PP.uoh, 'From the Use of Home sheet');
+  cell('net', 'Net profit per accounts', has(S.profit.netOverride) ? num(S.profit.netOverride) : { f: '{turnover}+{otherInc}-{expenses}-{uoh}' }, PP.net,
+    'Type the trading profit from the accounts here to replace the formula; the tax below updates');
+  cell('ca', 'Capital allowances', C.ca.figure, PP.ca, 'From the CA sheet');
+  cell('adj', 'Tax adjustments (+ add back, - deduct)', num(S.profit.adjustments), PP.adjustments);
+  cell('tp', 'Taxable trading profit', { f: '{net}-{ca}+{adj}' }, PP.taxable);
+
+  sec('OTHER INCOME, RELIEFS AND PAYMENTS (from the Tax sheet)');
+  cell('emp', 'Employment pay', T.emp);
+  cell('pens', 'Pensions and taxable benefits', T.pens);
+  cell('prop', 'UK property profit', T.prop.profit);
+  cell('fin', 'Residential finance costs (mortgage interest)', T.prop.finance);
+  cell('oth', 'Other taxable income', T.other);
+  cell('sav', 'Interest', T.sav);
+  cell('div', 'Dividends', T.div);
+  cell('penNet', 'Pension contributions, net paid', T.pensionNet);
+  cell('gaNet', 'Gift Aid, net paid (boxes 5 - 7 + 8)', r2(T.ga.box5 - T.ga.box7 + T.ga.box8));
+  cell('src', 'Tax deducted at source', T.atSource);
+  cell('slPaye', 'Student loan deducted by employer', num(S.tax.slPaye));
+  cell('poaPaid', 'Payments on account made for this year', num(S.tax.poaPaid));
+  cell('cbAmt', 'Child Benefit received', S.tax.cb ? T.cbAmount : 0, null, S.tax.cb ? `${S.tax.children} child(ren), ${S.tax.cbWeeks} weeks` : 'No Child Benefit');
+  cell('slThr', `Student loan threshold (${S.tax.slPlan})`, slKey ? R[slKey] : 0, null, '0 means no student loan repayments');
+  cell('slRate', 'Student loan rate', S.tax.slPlan === 'Postgraduate' ? R.slPGRate : R.slRate, null, '', P);
+
+  sec(`RATES ${ty}`);
+  [['pa', 'Personal allowance'], ['taper', 'Allowance tapers above'], ['brb', 'Basic rate band'], ['hrl', 'Additional rate threshold'],
+    ['rBasic', 'Basic rate', P], ['rHigher', 'Higher rate', P], ['rAdd', 'Additional rate', P],
+    ['sBasic', 'Savings basic rate', P], ['sHigher', 'Savings higher rate', P], ['sAdd', 'Savings additional rate', P],
+    ['startSav', 'Starting rate for savings band'], ['psaBasic', 'Personal savings allowance, basic rate'], ['psaHigher', 'Personal savings allowance, higher rate'],
+    ['divAllow', 'Dividend allowance'], ['dBasic', 'Dividend basic rate', P], ['dHigher', 'Dividend higher rate', P], ['dAdd', 'Dividend additional rate', P],
+    ['c4Lower', 'Class 4 lower profits limit'], ['c4Upper', 'Class 4 upper profits limit'], ['c4Main', 'Class 4 main rate', P], ['c4Add', 'Class 4 rate above upper limit', P],
+    ['hicbcLo', 'Child Benefit charge starts at'], ['hicbcHi', 'Child Benefit charge is 100% at'], ['financeCredit', 'Finance cost relief rate', P],
+  ].forEach(([k, label, z]) => cell(k, label, R[k], null, '', z));
+
+  sec(`TAX CALCULATION ${ty}`);
+  cell('trade', 'Trading profit (a loss counts as nil here)', { f: 'MAX(0,{tp})' });
+  cell('nonSav', 'Non-savings income', { f: '{trade}+{emp}+{pens}+{prop}+{oth}' });
+  cell('ti', 'Total income', { f: '{nonSav}+{sav}+{div}' });
+  cell('gr', 'Gross pension contributions and Gift Aid', { f: '({penNet}+{gaNet})*1.25' }, null, 'Extends the basic and higher rate bands');
+  cell('ani', 'Adjusted net income', { f: '{ti}-{gr}' });
+  cell('paAv', 'Personal allowance', { f: 'MAX(0,{pa}-ROUNDDOWN(MAX(0,{ani}-{taper})/2,0))' });
+  cell('nsT', 'Taxable non-savings income', { f: 'MAX(0,{nonSav}-{paAv})' });
+  cell('svT', 'Taxable savings income', { f: 'MAX(0,{sav}-MAX(0,{paAv}-{nonSav}))' });
+  cell('dvT', 'Taxable dividend income', { f: 'MAX(0,{div}-MAX(0,{paAv}-{nonSav}-{sav}))' });
+  cell('taxable', 'Taxable income', { f: '{nsT}+{svT}+{dvT}' });
+  cell('bandB', 'Basic rate band, extended', { f: '{brb}+{gr}' });
+  cell('bandH', 'Additional rate threshold, extended', { f: '{hrl}+{gr}' });
+  cell('nsB', 'Non-savings at basic rate', { f: 'MIN({nsT},{bandB})' });
+  cell('nsH', 'Non-savings at higher rate', { f: 'MAX(0,MIN({nsT},{bandH})-{bandB})' });
+  cell('nsA', 'Non-savings at additional rate', { f: 'MAX(0,{nsT}-{bandH})' });
+  cell('svSR', 'Savings at the starting rate (0%)', { f: 'MIN({svT},MAX(0,{startSav}-{nsT}))' });
+  cell('psaAv', 'Personal savings allowance available', { f: 'IF({taxable}>{bandH},0,IF({taxable}>{bandB},{psaHigher},{psaBasic}))' });
+  cell('svPSA', 'Savings in the personal savings allowance (0%)', { f: 'MIN({svT}-{svSR},{psaAv})' });
+  cell('svPos', 'Savings taxed from this point in the bands', { f: '{nsT}+{svSR}+{svPSA}' });
+  cell('svC', 'Savings taxed', { f: '{svT}-{svSR}-{svPSA}' });
+  cell('svB', 'Savings at basic rate', { f: 'MAX(0,MIN({svPos}+{svC},{bandB})-{svPos})' });
+  cell('svH', 'Savings at higher rate', { f: 'MAX(0,MIN({svPos}+{svC},{bandH})-MAX({svPos},{bandB}))' });
+  cell('svA', 'Savings at additional rate', { f: 'MAX(0,{svPos}+{svC}-MAX({svPos},{bandH}))' });
+  cell('dvAl', 'Dividends in the dividend allowance (0%)', { f: 'MIN({dvT},{divAllow})' });
+  cell('dvPos', 'Dividends taxed from this point in the bands', { f: '{nsT}+{svT}+{dvAl}' });
+  cell('dvC', 'Dividends taxed', { f: '{dvT}-{dvAl}' });
+  cell('dvB', 'Dividends at basic rate', { f: 'MAX(0,MIN({dvPos}+{dvC},{bandB})-{dvPos})' });
+  cell('dvH', 'Dividends at higher rate', { f: 'MAX(0,MIN({dvPos}+{dvC},{bandH})-MAX({dvPos},{bandB}))' });
+  cell('dvA', 'Dividends at additional rate', { f: 'MAX(0,{dvPos}+{dvC}-MAX({dvPos},{bandH}))' });
+  cell('itGross', 'Income tax before reliefs', { f: '{nsB}*{rBasic}+{nsH}*{rHigher}+{nsA}*{rAdd}+{svB}*{sBasic}+{svH}*{sHigher}+{svA}*{sAdd}+{dvB}*{dBasic}+{dvH}*{dHigher}+{dvA}*{dAdd}' });
+  cell('finCr', 'Less: relief on property finance costs', { f: 'MIN({itGross},{financeCredit}*MIN({fin},{prop}))' });
+  cell('it', 'Income tax', { f: '{itGross}-{finCr}' });
+  cell('c4', 'Class 4 NI', { f: 'MAX(0,MIN({trade},{c4Upper})-{c4Lower})*{c4Main}+MAX(0,{trade}-{c4Upper})*{c4Add}' });
+  cell('slInc', 'Income for student loan', { f: '{trade}+{emp}+IF({prop}+{sav}+{div}+{oth}+{pens}>2000,{prop}+{sav}+{div}+{oth}+{pens},0)' }, null, 'Unearned income counts only over £2,000');
+  cell('sl', 'Student loan repayments', { f: 'IF({slThr}>0,MAX(0,ROUNDDOWN(MAX(0,{slInc}-{slThr})*{slRate},0)-{slPaye}),0)' });
+  cell('hPct', 'Child Benefit charge %', { f: 'MIN(100,MAX(0,ROUNDDOWN(({ani}-{hicbcLo})/(({hicbcHi}-{hicbcLo})/100),0)))' }, null, '', '0');
+  cell('hicbc', 'High Income Child Benefit Charge', { f: 'ROUNDDOWN({cbAmt}*{hPct}/100,0)' });
+  cell('liab', 'TOTAL LIABILITY', { f: '{it}+{c4}+{sl}+{hicbc}' });
+
+  sec('PAYMENTS');
+  cell('lessSrc', 'Less: tax deducted at source', { f: '-{src}' });
+  cell('lessPoa', 'Less: payments on account made', { f: '-{poaPaid}' });
+  cell('bal', `Balancing payment, 31 Jan ${ey}`, { f: '{liab}+{lessSrc}+{lessPoa}' });
+  cell('poaBase', 'Payments on account are based on', { f: '{it}+{c4}+{hicbc}-{src}' }, null, 'None due if under £1,000, or if over 80% was taxed at source');
+  cell('poa', `1st payment on account for ${T.endYear}/${String(ey).slice(2)}, 31 Jan ${ey}`, { f: 'IF(AND({poaBase}>=1000,{src}<0.8*({it}+{c4}+{hicbc})),{poaBase}/2,0)' });
+  cell('jan', `TOTAL DUE 31 JAN ${ey}`, { f: '{bal}+{poa}' });
+  cell('jul', `2nd payment on account, 31 Jul ${ey}`, { f: '{poa}' });
+
+  // Place rows, then work out every formula from the cells it refers to.
+  const top = head.length + 2; // a column header row follows the client heading
+  const addr = {}, byKey = {};
+  rows.forEach((r, i) => { if (r.key) { addr[r.key] = 'B' + (top + i); byKey[r.key] = r; } });
+  const memo = {};
+  const IF = (c, a, b) => (c ? a : b), AND = (...a) => a.every(Boolean), RD = (x, n) => Math.trunc(x * 10 ** n) / 10 ** n;
+  const get = k => {
+    if (k in memo) return memo[k];
+    const v = byKey[k].val;
+    if (typeof v !== 'object') return (memo[k] = v);
+    const js = v.f.replace(/\{(\w+)\}/g, (_, x) => `get("${x}")`).replace(/MAX\(/g, 'Math.max(').replace(/MIN\(/g, 'Math.min(').replace(/ROUNDDOWN\(/g, 'RD(');
+    return (memo[k] = Function('get', 'IF', 'AND', 'RD', `return (${js});`)(get, IF, AND, RD));
+  };
+  const aoa = [...head, ['', 'This year', 'Last year', 'Notes']];
+  rows.forEach(r => {
+    if (r.title) return aoa.push([r.title]);
+    const v = r.val, z = r.z || '#,##0.00;[Red]-#,##0.00';
+    const c = typeof v === 'object' ? { t: 'n', f: v.f.replace(/\{(\w+)\}/g, (_, x) => addr[x]), v: get(r.key), z } : { t: 'n', v: v, z };
+    aoa.push([r.label, c, r.prior == null ? '' : r.prior, r.note || '']);
+  });
+  return { aoa, values: Object.fromEntries(Object.keys(byKey).map(k => [k, get(k)])) };
+}
+
+// Xero manual journal: one debit per cost item for its business share, the
+// rounding up to whole pounds, and the balancing credit to the clearing account.
+function journalLines(C = compute()) {
+  const J = S.journal || {}, u = C.uoh;
+  const d = has(J.date) ? new Date(J.date) : new Date(S.client.end);
+  const date = isNaN(d) ? '' : d.toLocaleDateString('en-GB');
+  const narration = `Use of Home ${S.client.taxYear}`;
+  const code = String(J.uohCode || '300').trim(), clear = String(J.clearCode || '990').trim();
+  const lines = [];
+  if (!u.figure) return { date, narration, lines };
+  if (S.uoh.method === 'flat') {
+    lines.push({ code, desc: `Use of Home - HMRC flat rate ${fmt0(u.flatRate)} a month x ${num(S.uoh.flatMonths)} months` });
+    lines[0].amount = u.figure;
+  } else {
+    const frac = u.roomFrac * u.timeFrac * (1 - u.shareFrac);
+    const parts = [];
+    if (u.roomFrac < 1) parts.push(`${num(S.uoh.workRooms)} of ${num(S.uoh.totalRooms)} rooms`);
+    if (u.timeFrac < 1) parts.push(`${pct(u.timeFrac)} business time`);
+    if (u.shareFrac) parts.push(`${pct(1 - u.shareFrac)} own share`);
+    const basis = parts.length ? ' @ ' + parts.join(' x ') : '';
+    S.uoh.lines.forEach(l => {
+      const amt = r2(lineAmount(l) * frac);
+      if (amt) lines.push({ code, desc: `Use of Home - ${l.desc || 'Running costs'} ${fmt(lineAmount(l))}${basis}`, amount: amt });
+    });
+    const rounding = r2(u.figure - lines.reduce((a, l) => a + l.amount, 0));
+    if (rounding) lines.push({ code, desc: 'Use of Home - rounded up to whole pounds', amount: rounding });
+  }
+  lines.push({ code: clear, desc: `Use of Home ${S.client.taxYear} - balancing to clearing`, amount: -r2(lines.reduce((a, l) => a + l.amount, 0)) });
+  return { date, narration, lines, taxRate: J.taxRate || 'No VAT' };
+}
+function journalFileName() { return exportFileName().replace('_YE_', '_UseOfHome_Journal_').replace(/\.xlsx$/, '.csv'); }
+$('#journalBtn').onclick = () => {
+  const J = journalLines();
+  if (!J.lines.length) { toast('There is no Use of Home figure to post yet.'); return; }
+  const q = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  const csv = ['*Narration,*Date,Description,*AccountCode,*TaxRate,*Amount,TrackingName1,TrackingOption1,TrackingName2,TrackingOption2']
+    .concat(J.lines.map(l => [J.narration, J.date, l.desc, l.code, J.taxRate, l.amount.toFixed(2), '', '', '', ''].map(q).join(','))).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
+  a.download = journalFileName();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast('Downloaded ' + journalFileName());
+};
+
 $('#exportBtn').onclick = () => {
   const C = compute(); const { uoh, ca, tax } = C;
   const P = S.uoh.prior, PP = S.profit.prior;
@@ -1733,26 +1917,7 @@ $('#exportBtn').onclick = () => {
   const val = x => (x == null || x === '' ? '' : x);
   const pc = x => ({ t: 'n', v: x, z: '0.00%' });
 
-  const summary = [...head,
-    ['', 'This year', 'Last year'],
-    ['Turnover', num(S.profit.turnover), val(PP.turnover)],
-    ['Other business income', num(S.profit.otherIncome), val(PP.otherIncome)],
-    ['Allowable expenses, excluding Use of Home', -num(S.profit.expenses), PP.expenses != null ? -PP.expenses : ''],
-    ['Use of Home', -uoh.figure, PP.uoh != null ? -PP.uoh : ''],
-    ['Net profit', C.net, val(PP.net)],
-    ['Capital allowances', -ca.figure, PP.ca != null ? -PP.ca : ''],
-    ['Tax adjustments', num(S.profit.adjustments), val(PP.adjustments)],
-    ['Taxable trading profit', C.taxable, val(PP.taxable)],
-    [],
-    ['Income tax', tax.it], ['Class 4 NI', tax.c4], ['Student loan', tax.sl], ['High Income Child Benefit Charge', tax.hicbc],
-    ['Total liability', tax.liability],
-    ['Less: tax deducted at source', -tax.atSource],
-    ['Less: payments on account made', -num(S.tax.poaPaid)],
-    [`Balancing payment 31 Jan ${tax.endYear + 1}`, tax.balancing],
-    [`1st payment on account 31 Jan ${tax.endYear + 1}`, tax.poa],
-    [`Total due 31 Jan ${tax.endYear + 1}`, tax.janTotal],
-    [`2nd payment on account 31 Jul ${tax.endYear + 1}`, tax.poa],
-  ];
+  const summary = summarySheet(C, head);
 
   const uohSheet = [...head, ['USE OF HOME', '', 'This year', 'Last year'], ['Item', 'Notes', '', '']];
   S.uoh.lines.forEach(l => uohSheet.push([l.desc, [l.note, isSum(l.expr) ? `(${l.expr})` : '', Object.keys(l.imp || {}).length && !has(l.expr) ? 'from ' + Object.keys(l.imp).join(', ') : ''].filter(Boolean).join(' · '), r2(lineAmount(l)), val(l.prior)]));
@@ -1801,14 +1966,6 @@ $('#exportBtn').onclick = () => {
   taxSheet.push(['Student loan', S.tax.slPlan, '', '', '', val(S.tax.prior.slPlan)]);
   taxSheet.push(['Child Benefit', S.tax.cb ? `Yes, ${S.tax.children} child(ren), ${S.tax.cbWeeks} weeks` : 'No', '', '', '', val(S.tax.prior.cb)]);
   taxSheet.push([]);
-  taxSheet.push(['TAX ESTIMATE ' + S.client.taxYear]);
-  taxSheet.push(['Total income', '', '', tax.totalIncome]); taxSheet.push(['Personal allowance', '', '', -Math.min(tax.pa, tax.totalIncome)]);
-  taxSheet.push(['Adjusted net income', '', '', tax.ani]); taxSheet.push(['Taxable income', '', '', tax.taxable]);
-  tax.lines.forEach(([l, v]) => taxSheet.push([l, '', '', r2(v)]));
-  if (tax.financeCredit) taxSheet.push(['Relief on property finance costs', '', '', -tax.financeCredit]);
-  taxSheet.push(['Income tax', '', '', tax.it]); taxSheet.push(['Class 4 NI', '', '', tax.c4]);
-  taxSheet.push(['Student loan', '', '', tax.sl]); taxSheet.push(['High Income Child Benefit Charge', '', '', tax.hicbc]);
-  taxSheet.push(['Total liability', '', '', tax.liability]);
   taxSheet.push([]); taxSheet.push(['Notes', S.tax.notes || '']);
   if (S.tax.prior.notes) taxSheet.push(["Last year's notes", S.tax.prior.notes]);
 
@@ -1816,7 +1973,7 @@ $('#exportBtn').onclick = () => {
   returnRows(S, C).forEach(([page, box, entry, now, prior]) => retSheet.push(page === null ? [entry.toUpperCase()] : [page, box, entry, val(now), val(prior)]));
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheetFrom(summary, [44, 14, 14]), 'Summary');
+  XLSX.utils.book_append_sheet(wb, sheetFrom(summary.aoa, [52, 15, 15, 58]), 'Summary');
   XLSX.utils.book_append_sheet(wb, sheetFrom(uohSheet, [34, 60, 14, 14]), 'Use of Home');
   XLSX.utils.book_append_sheet(wb, sheetFrom(caSheet, [44, 13, 13, 13, 13, 15, 13, 11, 16]), 'CA');
   XLSX.utils.book_append_sheet(wb, sheetFrom(taxSheet, [34, 34, 12, 14, 13, 13, 50]), 'Tax');
