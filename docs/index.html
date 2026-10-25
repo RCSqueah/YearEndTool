@@ -704,7 +704,7 @@ function calcUoh(st = S) {
   const claim = u.method === 'flat' ? flat : actual;
   return {
     total, roomFrac, afterRooms, timeFrac, timeText, afterTime, shareFrac, actual, flatHrs: hrs, flatRate: rate, flat,
-    claim, figure: Math.ceil(r2(claim) - 1e-9), // the working papers round expenses up to whole pounds
+    claim, figure: r2(claim), // to the penny, matching the Xero journal
   };
 }
 
@@ -748,7 +748,7 @@ function calcCa(st = S) {
     split.other += (p.wda + p.ba) * p.biz; split.bc += p.bc * p.biz;
   });
   Object.keys(split).forEach(k => { split[k] = r2(split[k]); });
-  return { main, sr, pools, total, figure: Math.round(total), split };
+  return { main, sr, pools, total, figure: total, split };
 }
 
 // ── Tax ────────────────────────────────────────────────────────────────────
@@ -1154,11 +1154,11 @@ function refresh() {
   out('yearHint', hasRates(S.client.taxYear) ? `Set from the period end. ${esc(S.client.taxYear)} rates are built in.` : `<span class="chip warn">No ${esc(S.client.taxYear)} rates yet</span> Add them under Tax rates on the Export tab.`);
 
   // Summary strip
-  out('sumUoh', fmt0(uoh.figure));
-  out('sumUohPrior', P.total != null ? 'Last year ' + fmt0(Math.ceil(P.total - 1e-9)) : '');
-  out('sumCa', fmt0(ca.figure));
+  out('sumUoh', fmt(uoh.figure));
+  out('sumUohPrior', P.total != null ? 'Last year ' + fmt(P.total) : '');
+  out('sumCa', fmt(ca.figure));
   out('sumCaPrior', S.ca.prior.total != null ? 'Last year ' + fmt0(S.ca.prior.total) : '');
-  out('sumProfit', fmt0(C.taxable));
+  out('sumProfit', fmt(C.taxable));
   out('sumProfitPrior', PP.taxable != null ? 'Last year ' + fmt0(PP.taxable) : '');
   out('sumTax', fmt0(tax.liability));
   out('sumTaxPrior', 'Before tax deducted at source');
@@ -1187,7 +1187,7 @@ function refresh() {
     calcRow(S.uoh.shared ? `Shared with partner, disallow ${pct(uoh.shareFrac)}` : 'Not shared with a partner', fmt(-(uoh.afterTime - uoh.actual)), 'sub') +
     calcRow('Actual costs claim', fmt(uoh.actual), S.uoh.method === 'actual' ? 'total' : '') +
     calcRow('HMRC flat rate claim', fmt(uoh.flat), S.uoh.method === 'flat' ? 'total' : 'sub') +
-    calcRow('Figure for accounts (rounded up)', fmt0(uoh.figure), 'key') +
+    calcRow('Figure for accounts', fmt(uoh.figure), 'key') +
     (P.total != null ? calcRow('Last year', fmt(P.total), 'sub') : '');
   const R = ratesFor(S.client.taxYear);
   out('flatBands', `${fmt0(R.flat25)} for 25–50 hours a month, ${fmt0(R.flat51)} for 51–100, ${fmt0(R.flat101)} for 101 or more`);
@@ -1221,11 +1221,11 @@ function refresh() {
   // Profit
   const pr = v => v != null ? fmt0(v) : '–';
   out('ppTurnover', pr(PP.turnover)); out('ppOther', pr(PP.otherIncome)); out('ppExpenses', pr(PP.expenses));
-  out('pUoh', fmt0(uoh.figure)); out('ppUoh', pr(PP.uoh));
-  out('pNet', fmt0(C.net)); out('ppNet', pr(PP.net));
-  out('pCa', fmt0(-ca.figure)); out('ppCa', PP.ca != null ? fmt0(-PP.ca) : '–');
+  out('pUoh', fmt(uoh.figure)); out('ppUoh', pr(PP.uoh));
+  out('pNet', fmt(C.net)); out('ppNet', pr(PP.net));
+  out('pCa', fmt(-ca.figure)); out('ppCa', PP.ca != null ? fmt0(-PP.ca) : '–');
   out('ppAdj', pr(PP.adjustments));
-  out('pTaxable', fmt0(C.taxable)); out('ppTaxable', pr(PP.taxable));
+  out('pTaxable', fmt(C.taxable)); out('ppTaxable', pr(PP.taxable));
   out('slPrior', S.tax.prior.slPlan ? 'Last year: ' + esc(S.tax.prior.slPlan) : '');
   out('cbPrior', S.tax.prior.cb ? 'Last year: ' + esc(S.tax.prior.cb) : '');
   TAX_SECTIONS.forEach(sec => {
@@ -1341,7 +1341,7 @@ function emailSections() {
     if (mode === 'hours') asks.push({ id: 'time', label: 'Hours a week at home', sub: has(u.hours) ? `Last year about ${num(u.hours)}` : '', lines: [`- Roughly how many hours a week you worked from home${ip && has(u.hours) ? ` (last year: about ${num(u.hours)} hours)` : ''}.`] });
     else if (mode === 'days') asks.push({ id: 'time', label: 'Days a week at home', sub: has(u.days) ? `Last year ${num(u.days)}` : '', lines: [`- Roughly how many days a week you worked from home${ip && has(u.days) ? ` (last year: ${num(u.days)} days)` : ''}.`] });
     else asks.push({ id: 'time', label: 'Time spent working at home', lines: ['- Roughly how much of your time at home was spent working.'] });
-    add('uoh', 'Working from home', u.prior.total != null ? `Last year's claim ${fmt0(Math.ceil(u.prior.total - 1e-9))}` : '', {
+    add('uoh', 'Working from home', u.prior.total != null ? `Last year's claim ${fmtM(u.prior.total)}` : '', {
       intro: '- What you paid during the year for:', list, after: '  A yearly total or the monthly amount is fine.', asks,
     });
   }
