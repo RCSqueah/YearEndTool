@@ -1034,26 +1034,27 @@ function renderLists() {
 function renderTaxSections() {
   $('#taxSections').innerHTML = TAX_SECTIONS.map(sec => {
     const list = items(S, sec.key);
-    const head = sec.cols.map(([f, label, isNum]) => `<th class="${isNum ? 'n' : ''}">${esc(label)}</th>`).join('');
+    // Notes sit before the amounts, so this year's figures are next to last year's.
+    const cols = [...sec.cols.filter(c => !c[2]), ['note', 'Notes'], ...sec.cols.filter(c => c[2])];
+    const head = cols.map(([f, label, isNum]) => `<th class="${isNum ? 'n' : ''}">${esc(label)}</th>`).join('');
     const body = list.map((it, i) => {
       const base = `tax.items.${sec.key}.${i}`;
-      const cells = sec.cols.map(([f, label, isNum]) => {
+      const cells = cols.map(([f, label, isNum]) => {
         if (f === 'kind') return `<td style="min-width:200px;"><select id="tx-${sec.key}-${i}-kind" data-bind="${base}.kind" aria-label="${esc(label)}">${sec.kinds.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select></td>`;
-        return `<td class="${isNum ? 'n' : ''}" style="min-width:${isNum ? 110 : 170}px;"><input class="${isNum ? 'num' : ''}" id="tx-${sec.key}-${i}-${f}" data-bind="${base}.${f}" ${isNum ? 'inputmode="decimal"' : ''} aria-label="${esc(label)}"></td>`;
+        return `<td class="${isNum ? 'n' : ''}" style="min-width:${isNum ? 110 : f === 'note' ? 200 : 170}px;"><input class="${isNum ? 'num' : ''}" id="tx-${sec.key}-${i}-${f}" data-bind="${base}.${f}" ${isNum ? 'inputmode="decimal"' : ''} ${f === 'note' ? 'placeholder="Notes"' : ''} aria-label="${esc(label)}"></td>`;
       }).join('');
       const priorBits = [];
       if (it.priorTax != null) priorBits.push('tax ' + fmt(it.priorTax));
       if (it.priorExpenses != null) priorBits.push('exp. ' + fmt(it.priorExpenses));
       if (it.priorExpr) priorBits.push(esc(it.priorExpr));
       return `<tr>${cells}
-        <td style="min-width:200px;"><input id="tx-${sec.key}-${i}-note" data-bind="${base}.note" aria-label="Notes" placeholder="Notes"></td>
         ${priorCell(it.prior, priorBits.join(' · '))}
         <td><button class="btn link danger" type="button" data-del="tax" data-sec="${sec.key}" data-i="${i}" aria-label="Remove">✕</button></td></tr>`;
     }).join('');
     const extra = sec.key === 'property' ? `<label class="check"><input type="checkbox" id="t-propallow" data-bind="tax.propAllowance"> Claim the property allowance instead of expenses</label>` : '';
     return `<section class="panel">
       <div class="panel-head"><div><h2>${esc(sec.title)}</h2><p class="muted small">${esc(sec.form)}${sec.hint ? '. ' + esc(sec.hint) : ''}</p></div><span class="chip" data-out="secTotal-${sec.key}"></span></div>
-      ${list.length ? `<div class="table-wrap"><table class="items"><thead><tr>${head}<th>Notes</th><th class="n">Last year £</th><th></th></tr></thead><tbody>${body}</tbody></table></div>` : `<p class="muted small">None entered.</p>`}
+      ${list.length ? `<div class="table-wrap"><table class="items"><thead><tr>${head}<th class="n">Last year £</th><th></th></tr></thead><tbody>${body}</tbody></table></div>` : `<p class="muted small">None entered.</p>`}
       <div class="row-actions"><button class="btn" type="button" data-add-item="${sec.key}">+ ${esc(sec.add)}</button>${extra}</div>
       <div class="trash" data-trash="tax-${sec.key}"></div>
     </section>`;
