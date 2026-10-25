@@ -2102,8 +2102,8 @@ function summarySheet(C, head) {
   return { aoa, values: Object.fromEntries(Object.keys(byKey).map(k => [k, get(k)])) };
 }
 
-// Xero manual journal: one debit per cost item for its business share, the
-// rounding up to whole pounds, and the balancing credit to the clearing account.
+// Xero manual journal: one debit per cost item for its business share, to the
+// penny, and the balancing credit to the clearing account.
 function journalLines(C = compute()) {
   const J = S.journal || {}, u = C.uoh;
   const d = has(J.date) ? new Date(J.date) : new Date(S.client.end);
@@ -2111,10 +2111,10 @@ function journalLines(C = compute()) {
   const narration = `Use of Home ${S.client.taxYear}`;
   const code = String(J.uohCode || '300').trim(), clear = String(J.clearCode || '990').trim();
   const lines = [];
-  if (!u.figure) return { date, narration, lines };
+  if (!r2(u.claim)) return { date, narration, lines };
   if (S.uoh.method === 'flat') {
     lines.push({ code, desc: `Use of Home - HMRC flat rate ${fmt0(u.flatRate)} a month x ${num(S.uoh.flatMonths)} months` });
-    lines[0].amount = u.figure;
+    lines[0].amount = r2(u.flat);
   } else {
     const frac = u.roomFrac * u.timeFrac * (1 - u.shareFrac);
     const parts = [];
@@ -2126,8 +2126,6 @@ function journalLines(C = compute()) {
       const amt = r2(lineAmount(l) * frac);
       if (amt) lines.push({ code, desc: `Use of Home - ${l.desc || 'Running costs'} ${fmt(lineAmount(l))}${basis}`, amount: amt });
     });
-    const rounding = r2(u.figure - lines.reduce((a, l) => a + l.amount, 0));
-    if (rounding) lines.push({ code, desc: 'Use of Home - rounded up to whole pounds', amount: rounding });
   }
   lines.push({ code: clear, desc: `Use of Home ${S.client.taxYear} - balancing to clearing`, amount: -r2(lines.reduce((a, l) => a + l.amount, 0)) });
   return { date, narration, lines, taxRate: J.taxRate || 'No VAT' };
