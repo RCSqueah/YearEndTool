@@ -88,6 +88,7 @@ input.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .btn { font: 600 13px var(--font-body); border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); border-radius: 4px; padding: 0 12px; height: var(--control-h); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
 .btn:hover { border-color: var(--accent); }
+a.btn { text-decoration: none; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--sheet); }
 .btn.link { border: 0; background: none; color: var(--accent); padding: 0 4px; height: auto; }
 .btn.danger { color: var(--bad); }
@@ -115,6 +116,11 @@ tr.group td { background: var(--paper); font-weight: 600; font-size: 12.5px; pad
 
 .chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
 .chip:empty { display: none; }
+.sec-list { display: grid; gap: 2px; }
+.sec-list .check { align-items: flex-start; min-height: 0; padding: 6px 0; border-bottom: 1px solid var(--rule); }
+.sec-list .check input { margin-top: 2px; }
+.sec-list .check b { font-weight: 600; }
+#em-body { min-height: 460px; font-size: 13.5px; line-height: 1.55; }
 .checks { display: flex; flex-wrap: wrap; gap: 4px 28px; }
 .chip.warn { background: var(--warn-soft); color: var(--warn); }
 .note { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 8px 12px; border-radius: 0 4px 4px 0; font-size: 13px; }
@@ -157,6 +163,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     </div>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="client" aria-selected="true">Client &amp; import</button>
+      <button role="tab" data-tab="email">Client email</button>
       <button role="tab" data-tab="uoh">Use of Home</button>
       <button role="tab" data-tab="ca">Capital allowances</button>
       <button role="tab" data-tab="tax">Tax</button>
@@ -230,6 +237,36 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     <div class="row-actions" id="resetRow"></div>
   </section>
   </div>
+</div>
+
+<!-- ───────────── CLIENT EMAIL ───────────── -->
+<div data-pane="email" hidden>
+  <section class="panel">
+    <div class="panel-head"><div><h2>Information request</h2><p class="muted small">Written from last year's workings. Untick anything you don't need to ask about, check the wording, then copy it into an email.</p></div></div>
+    <div class="fields">
+      <label class="field"><span>Dear</span><input id="em-first" data-bind="email.firstName" placeholder="First name"></label>
+      <label class="field"><span>Client's email address</span><input id="em-to" type="email" data-bind="email.to"><span class="hint">Only for "Open in email app"</span></label>
+      <label class="field"><span>Reply by</span><input id="em-reply" type="date" data-bind="email.replyBy"><span class="hint">Leave blank to leave the date out</span></label>
+      <label class="check"><input type="checkbox" id="em-prior" data-bind="email.includePrior"> Show last year's figures</label>
+    </div>
+    <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));">
+      <div style="display:grid;gap:8px;align-content:start;">
+        <h3>What to ask for</h3>
+        <div class="sec-list" id="emailSections"></div>
+        <label class="field" style="margin-top:8px;"><span>Your sign-off</span><textarea id="em-sig" rows="3"></textarea><span class="hint">Saved in this browser for every client</span></label>
+      </div>
+      <div style="display:grid;gap:10px;align-content:start;">
+        <label class="field"><span>Subject</span><input id="em-subject" data-bind="email.subject"></label>
+        <label class="field"><span>Email</span><textarea id="em-body"></textarea></label>
+        <p class="note" id="emEdited" hidden>You've edited the email, so changes to the options above won't update it. <button class="btn link" type="button" id="emRebuild">Rebuild it from the workings</button></p>
+        <div class="row-actions">
+          <button class="btn primary" type="button" id="emCopy">Copy email</button>
+          <button class="btn" type="button" id="emCopySubject">Copy subject</button>
+          <a class="btn" id="emMail" href="#">Open in email app</a>
+        </div>
+      </div>
+    </div>
+  </section>
 </div>
 
 <!-- ───────────── USE OF HOME ───────────── -->
@@ -538,6 +575,7 @@ function blankState() {
     ca: { mainBf: '', mainAdd: '', mainDisp: '', mainAia: true, srBf: '', srAdd: '', srDisp: '', pools: [], notes: '', prior: { total: null, rows: [], notes: '', source: '' } },
     tax: { items: blankItems(), propAllowance: false, slPlan: 'None', slPaye: '', cb: false, children: '1', cbWeeks: '52', poaPaid: '', notes: '', prior: { notes: '' } },
     trash: [],
+    email: { firstName: '', to: '', replyBy: '', includePrior: true, subject: '', text: '', edited: false, off: {} },
   };
 }
 let S = load();
@@ -938,6 +976,7 @@ function onField(e) {
     if (!isNaN(d)) { S.client.taxYear = taxYearOfEnd(d); bindAll(); renderRates(); }
   }
   if (el.id === 'f-year' && e.type === 'change') renderRates();
+  if (el.dataset.bind.startsWith('email.') && el.id !== 'em-subject') renderEmail();
   if (el.dataset.rerender && e.type === 'change') renderLists();
   refresh();
 }
@@ -1084,6 +1123,7 @@ function showTab(name) {
   $$('nav.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
   $$('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== name; });
   try { sessionStorage.setItem('yearEnd:tab', name); } catch (_) {}
+  if (name === 'email') renderEmail();
 }
 
 function calcRow(label, val, cls = '', prior) {
@@ -1227,6 +1267,166 @@ function refresh() {
   renderLog();
   save();
 }
+
+// ── Client email ───────────────────────────────────────────────────────────
+// Builds the year's information request from what was claimed last year.
+const SIG_KEY = 'yearEnd:signature';
+const DEFAULT_SIG = 'Stephen Queah\nReliable Client Solutions';
+function signature() { try { return localStorage.getItem(SIG_KEY) ?? DEFAULT_SIG; } catch (_) { return DEFAULT_SIG; } }
+const fmtM = x => Number.isInteger(r2(x)) ? fmt0(x) : fmt(x);
+const longDate = d => { const x = new Date(d); return isNaN(x) ? '' : x.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); };
+const listText = a => a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+const cap = t => { t = String(t || '').trim(); return t ? t[0].toUpperCase() + t.slice(1) : t; };
+// A line's own name, unless it's just the section's name ("Gift Aid", "Interest").
+function itemName(it, generic) {
+  const d = String(it.desc || '').trim();
+  if (d && !generic.test(d)) return d;
+  const m = String(it.note || '').match(/\bto ([A-Z][\w.&'-]*(?: [A-Z][\w.&'-]*)*)/);
+  return m ? m[1] : '';
+}
+
+function emailSections() {
+  const st = S, ip = st.email.includePrior !== false;
+  const ly = v => (ip && v != null && v !== 0 ? ` (last year: ${fmtM(v)})` : '');
+  const end = longDate(st.client.end);
+  const out = [];
+  const add = (key, title, summary, lines) => { if (lines.length) out.push({ key, title, summary, lines }); };
+  const PP = st.profit.prior;
+
+  add('business', 'Your business', PP.turnover ? `Last year's turnover ${fmt0(PP.turnover)}` : 'Income and expenses', [
+    `- Your business income and expenses for the year to ${end}: bank statements, sales invoices and receipts, or your own records.`,
+    '- Anything larger you bought for the business, such as tools, equipment, a computer or a vehicle, with the date and cost.',
+  ]);
+
+  const u = st.uoh;
+  if (u.lines.length || u.prior.total != null) {
+    const lines = [];
+    if (u.lines.length) {
+      lines.push('- What you paid during the year for:');
+      u.lines.forEach(l => lines.push(`    • ${cap(l.desc) || 'Household bill'}${ly(l.prior)}`));
+      lines.push('  A yearly total or the monthly amount is fine.');
+    } else lines.push('- Your household bills for the year: rent or mortgage interest, council tax, water, gas and electricity.');
+    if (num(u.totalRooms) && num(u.workRooms)) lines.push(`- Last year you used ${num(u.workRooms)} of the ${num(u.totalRooms)} rooms in your home for work. Please let me know if that has changed.`);
+    else lines.push('- How many rooms there are in your home, and how many you use for work.');
+    const mode = u.timeMode || 'hours';
+    if (mode === 'hours') lines.push(`- Roughly how many hours a week you worked from home${ip && has(u.hours) ? ` (last year: about ${num(u.hours)} hours)` : ''}.`);
+    else if (mode === 'days') lines.push(`- Roughly how many days a week you worked from home${ip && has(u.days) ? ` (last year: ${num(u.days)} days)` : ''}.`);
+    else lines.push('- Roughly how much of your time at home was spent working.');
+    add('uoh', 'Working from home', u.prior.total != null ? `Last year's claim ${fmt0(Math.ceil(u.prior.total - 1e-9))}, ${u.lines.length} bills` : `${u.lines.length} bills`, lines);
+  }
+
+  const pools = st.ca.pools.filter(p => !p.disposed);
+  if (pools.length) {
+    const lines = [];
+    pools.forEach(p => {
+      const name = String(p.desc || 'your vehicle').replace(/^(vehicle|car|van):\s*/i, '');
+      lines.push(`- ${cap(name)}: do you still have it? If you sold or part-exchanged it, please send the date and the amount you received.`);
+      if (num(p.bizPct) < 100) lines.push(`- Roughly what share of its mileage was for business${ip && has(p.bizPct) ? ` (last year: ${num(p.bizPct)}%)` : ''}.`);
+    });
+    lines.push('- If you bought or leased another vehicle, the invoice or finance agreement.');
+    add('vehicles', 'Vehicles', pools.map(p => p.desc).join(', '), lines);
+  }
+
+  const it = sec => items(st, sec);
+  add('employment', 'Employment', it('employment').map(e => e.desc || 'Employer').join(', '),
+    it('employment').map(e => `- Your P60 from ${e.desc || 'your employer'}${ly(e.prior)}, and a P11D if you had benefits such as private medical cover or a company car.`));
+
+  const listSection = (key, title, sec, generic, intro, after) => {
+    const list = it(sec);
+    if (!list.length) return;
+    const named = list.map(x => ({ name: itemName(x, generic), prior: x.prior }));
+    const lines = [intro];
+    named.forEach(n => lines.push(`    • ${n.name || 'Each account'}${ly(n.prior)}`));
+    if (after) lines.push(after);
+    add(key, title, named.map(n => n.name || '(unnamed)').join(', '), lines);
+  };
+  listSection('interest', 'Savings interest', 'interest', /^(savings )?interest$/i, '- The interest paid to you during the year by:', "  Your bank's yearly interest statement, or online banking, will show this. ISA interest isn't needed.");
+  listSection('dividends', 'Dividends', 'dividends', /^dividends?$/i, '- Dividends paid to you during the year by:', "  A dividend voucher, or your investment platform's yearly tax statement, will show this.");
+
+  add('pensions', 'Pensions', it('pensions').map(x => x.desc || 'Pension').join(', '), it('pensions').map(x =>
+    x.kind === 'state' ? `- Your State Pension for the year${ly(x.prior)}. The yearly letter about your State Pension shows the weekly amount.`
+      : x.kind === 'benefit' ? `- ${cap(x.desc) || 'Taxable benefits'}: the amount received${ly(x.prior)}.`
+        : `- Your P60 from ${itemName(x, /^pensions?$/i) || 'your pension provider'}${ly(x.prior)}.`));
+
+  add('property', 'Rental property', it('property').map(x => x.desc || 'Property').join(', '), it('property').map(x =>
+    `- ${cap(x.desc) || 'Your rental property'}: the rent you received${ly(x.prior)}, and what you spent on the property, including any mortgage interest.`));
+
+  add('other', 'Other income', it('other').map(x => x.desc || 'Other').join(', '), it('other').map(x => `- ${cap(x.desc) || 'Other income'}: the amount received${ly(x.prior)}.`));
+
+  add('pensionNet', 'Pension contributions', it('pensionNet').map(x => x.desc || 'Pension').join(', '), it('pensionNet').map(x => {
+    const n = itemName(x, /^pension( contributions?)?$/i);
+    return `- What you paid into your pension${n ? ' with ' + n : ''} during the year${ly(x.prior)}. Your provider's yearly statement shows this.`;
+  }));
+
+  listSection('giftAid', 'Gift Aid', 'giftAid', /^gift aid( donations?)?$/i, '- Gift Aid donations you made during the year to:', '  Please tell me if any were one-off donations rather than regular ones.');
+
+  if (st.tax.slPlan && st.tax.slPlan !== 'None') add('studentLoan', 'Student loan', st.tax.slPlan, [`- Whether you're still repaying your student loan (${st.tax.slPlan}).`]);
+  if (st.tax.cb) add('childBenefit', 'Child Benefit', `${st.tax.children} child(ren)`, ['- Whether you or your partner still get Child Benefit, and for how many children.']);
+  add('payments', 'Payments to HMRC', 'Payments on account', [`- Any payments you've made to HMRC towards your ${st.client.taxYear} tax, such as payments on account in January and July.`]);
+  add('anything', 'Anything else', 'Other income and changes', [
+    '- Any other income not listed above, for example rent from a property, dividends, savings interest, a pension, income from abroad, or money from selling shares, cryptoassets or a property.',
+    '- Any changes I should know about, such as a new job, moving home, getting married, having a child, or starting to pay into a pension or give to charity.',
+  ]);
+  return out;
+}
+
+function composeEmail() {
+  const st = S, e = st.email;
+  const first = (e.firstName || String(st.client.name || '').trim().split(/\s+/)[0] || '').trim();
+  const ty = st.client.taxYear, ey = yearEnd(ty) + 1;
+  const secs = emailSections().filter(x => !e.off[x.key]);
+  const ip = e.includePrior !== false;
+  const body = [
+    `Dear ${first || 'Sir or Madam'},`,
+    '',
+    `I'm starting work on your ${ty} tax return, which covers ${longDate(st.client.start)} to ${longDate(st.client.end)}. Please could you send me the following${ip ? ". Where I have last year's figures I've shown them, to help you find the right paperwork" : ''}.`,
+    '',
+    ...secs.flatMap(x => [x.title, ...x.lines, '']),
+    has(e.replyBy)
+      ? `If you could send these by ${longDate(e.replyBy)}, that leaves plenty of time before the 31 January ${ey} deadline. If anything isn't clear, just reply to this email or give me a call.`
+      : `The deadline for filing and paying is 31 January ${ey}, so the sooner I have these the better. If anything isn't clear, just reply to this email or give me a call.`,
+    '',
+    'Kind regards,',
+    signature(),
+  ];
+  return body.join('\n');
+}
+
+function renderEmail() {
+  const e = S.email;
+  if (!has(e.subject)) e.subject = `Your ${S.client.taxYear} tax return: information needed`;
+  $('#emailSections').innerHTML = emailSections().map(x => `<label class="check"><input type="checkbox" data-email-sec="${x.key}" ${e.off[x.key] ? '' : 'checked'}>
+    <span><b>${esc(x.title)}</b><br><span class="muted small">${esc(x.summary || '')}</span></span></label>`).join('');
+  if (!e.edited) e.text = composeEmail();
+  const body = $('#em-body');
+  if (document.activeElement !== body) body.value = e.text;
+  $('#emEdited').hidden = !e.edited;
+  const sig = $('#em-sig'); if (document.activeElement !== sig) sig.value = signature();
+  const subj = $('#em-subject'); if (document.activeElement !== subj) subj.value = e.subject;
+  $('#emMail').href = `mailto:${encodeURIComponent(e.to || '')}?subject=${encodeURIComponent(e.subject)}&body=${encodeURIComponent(e.text)}`;
+  save();
+}
+document.addEventListener('change', ev => {
+  const k = ev.target.dataset && ev.target.dataset.emailSec;
+  if (!k) return;
+  if (ev.target.checked) delete S.email.off[k]; else S.email.off[k] = true;
+  renderEmail();
+});
+$('#em-body').addEventListener('input', ev => {
+  S.email.text = ev.target.value; S.email.edited = true;
+  $('#emEdited').hidden = false;
+  $('#emMail').href = `mailto:${encodeURIComponent(S.email.to || '')}?subject=${encodeURIComponent(S.email.subject)}&body=${encodeURIComponent(S.email.text)}`;
+  save();
+});
+$('#em-sig').addEventListener('input', ev => { try { localStorage.setItem(SIG_KEY, ev.target.value); } catch (_) {} renderEmail(); });
+$('#emRebuild').onclick = () => { S.email.edited = false; renderEmail(); toast('Email rebuilt from the workings.'); };
+$('#em-subject').addEventListener('input', () => renderEmail());
+async function copyText(text, el, what) {
+  try { await navigator.clipboard.writeText(text); toast(`Copied the ${what}.`); }
+  catch (_) { el.focus(); el.select(); toast(`Press Ctrl+C to copy the ${what}.`); }
+}
+$('#emCopy').onclick = () => copyText(S.email.text, $('#em-body'), 'email');
+$('#emCopySubject').onclick = () => copyText(S.email.subject, $('#em-subject'), 'subject');
 
 // ── Rates editor ───────────────────────────────────────────────────────────
 function renderRates() {
