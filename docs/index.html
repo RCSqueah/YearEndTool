@@ -463,15 +463,20 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     <div class="row-actions"><button class="btn primary" type="button" id="exportBtn">↓ Download Excel workbook</button><span class="muted small" data-out="exportName"></span></div>
   </section>
   <section class="panel" style="margin-top:18px;">
-    <div class="panel-head"><div><h2>Xero manual journal: Use of Home</h2><p class="muted small">A CSV for Xero → Accounting → Manual journals → Import. Debits Use of Home, with the balancing credit to the clearing account.</p></div></div>
+    <div class="panel-head"><div><h2>Xero manual journals</h2><p class="muted small">One CSV for Xero → Accounting → Manual journals → Import. Use of Home and capital allowances come in as two journals, each with its balancing figure to the clearing account.</p></div></div>
+    <div class="checks">
+      <label class="check"><input type="checkbox" id="j-incuoh" data-bind="journal.includeUoh"> Use of Home</label>
+      <label class="check"><input type="checkbox" id="j-incca" data-bind="journal.includeCa"> Capital allowances</label>
+    </div>
     <div class="fields">
       <label class="field"><span>Use of Home account code</span><input id="j-uoh" data-bind="journal.uohCode"></label>
+      <label class="field"><span>Capital allowances account code</span><input id="j-ca" data-bind="journal.caCode"></label>
       <label class="field"><span>Balancing account code</span><input id="j-clear" data-bind="journal.clearCode"></label>
       <label class="field"><span>Journal date</span><input id="j-date" type="date" data-bind="journal.date"><span class="hint">Blank uses the period end</span></label>
       <label class="field"><span>Tax rate</span><input id="j-tax" data-bind="journal.taxRate"><span class="hint">As named in Xero</span></label>
     </div>
     <div class="table-wrap"><table><thead><tr><th>Date</th><th>Account</th><th>Description</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead><tbody id="journalTable"></tbody></table></div>
-    <div class="row-actions"><button class="btn primary" type="button" id="journalBtn">↓ Download Xero journal CSV</button><span class="muted small" data-out="journalName"></span></div>
+    <div class="row-actions"><button class="btn primary" type="button" id="journalBtn">↓ Download Xero journals CSV</button><span class="muted small" data-out="journalName"></span></div>
   </section>
   <section class="panel" style="margin-top:18px;">
     <details class="rates" id="ratesBox">
@@ -572,7 +577,7 @@ function blankState() {
     client: { name: '', taxYear: '2025/26', start: '2025-04-06', end: '2026-04-05', basis: 'Cash basis' },
     imp: { uohCode: '', inPeriodOnly: true, log: [] },
     profit: { turnover: '', otherIncome: '', expenses: '', netOverride: '', adjustments: '', prior: {} },
-    journal: { uohCode: '300', clearCode: '990', date: '', taxRate: 'No VAT' },
+    journal: { uohCode: '300', caCode: '315', clearCode: '990', date: '', taxRate: 'No VAT', includeUoh: true, includeCa: true },
     uoh: {
       method: 'actual', lines: [], totalRooms: '', workRooms: '', timeMode: 'hours', hours: '', dayHours: '7.5', days: '', timePct: '',
       shared: false, sharedPct: '50', flatHours: '', flatMonths: '12', notes: '',
@@ -1277,9 +1282,10 @@ function refresh() {
 
   out('exportName', esc(exportFileName()));
   const J = journalLines(C);
-  $('#journalTable').innerHTML = J.lines.map(l => `<tr><td>${esc(J.date)}</td><td>${esc(l.code)}</td><td>${esc(l.desc)}</td><td class="n">${l.amount > 0 ? fmt(l.amount) : ''}</td><td class="n">${l.amount < 0 ? fmt(-l.amount) : ''}</td></tr>`).join('')
-    || '<tr><td colspan="5" class="muted">No Use of Home figure to post yet.</td></tr>';
-  out('journalName', J.lines.length ? esc(journalFileName()) : '');
+  $('#journalTable').innerHTML = J.journals.map(j => `<tr class="group"><td colspan="5">${esc(j.narration)}</td></tr>` +
+    j.lines.map(l => `<tr><td>${esc(J.date)}</td><td>${esc(l.code)}</td><td>${esc(l.desc)}</td><td class="n">${l.amount > 0 ? fmt(l.amount) : ''}</td><td class="n">${l.amount < 0 ? fmt(-l.amount) : ''}</td></tr>`).join('')).join('')
+    || '<tr><td colspan="5" class="muted">Nothing to post yet.</td></tr>';
+  out('journalName', J.journals.length ? esc(journalFileName()) : '');
   renderLog();
   save();
 }
@@ -2108,41 +2114,81 @@ function summarySheet(C, head) {
   return { aoa, values: Object.fromEntries(Object.keys(byKey).map(k => [k, get(k)])) };
 }
 
-// Xero manual journal: one debit per cost item for its business share, to the
-// penny, and the balancing credit to the clearing account.
+// Xero manual journals, one per narration, each with its balancing figure to
+// the clearing account:
+//  - Use of Home: a debit per cost item for its business share, to the penny;
+//  - Capital allowances: a debit per pool for the allowance claimed (a credit
+//    for a balancing charge), worded like the firm's own journals.
 function journalLines(C = compute()) {
-  const J = S.journal || {}, u = C.uoh;
+  const J = S.journal || {}, u = C.uoh, ty = S.client.taxYear;
   const d = has(J.date) ? new Date(J.date) : new Date(S.client.end);
   const date = isNaN(d) ? '' : d.toLocaleDateString('en-GB');
-  const narration = `Use of Home ${S.client.taxYear}`;
-  const code = String(J.uohCode || '300').trim(), clear = String(J.clearCode || '990').trim();
-  const lines = [];
-  if (!r2(u.claim)) return { date, narration, lines };
-  if (S.uoh.method === 'flat') {
-    lines.push({ code, desc: `Use of Home - HMRC flat rate ${fmt0(u.flatRate)} a month x ${num(S.uoh.flatMonths)} months` });
-    lines[0].amount = r2(u.flat);
-  } else {
-    const frac = u.roomFrac * u.timeFrac * (1 - u.shareFrac);
-    const parts = [];
-    if (u.roomFrac < 1) parts.push(`${num(S.uoh.workRooms)} of ${num(S.uoh.totalRooms)} rooms`);
-    if (u.timeFrac < 1) parts.push(`${pct(u.timeFrac)} business time`);
-    if (u.shareFrac) parts.push(`${pct(1 - u.shareFrac)} own share`);
-    const basis = parts.length ? ' @ ' + parts.join(' x ') : '';
-    S.uoh.lines.forEach(l => {
-      const amt = r2(lineAmount(l) * frac);
-      if (amt) lines.push({ code, desc: `Use of Home - ${l.desc || 'Running costs'} ${fmt(lineAmount(l))}${basis}`, amount: amt });
-    });
+  const clear = String(J.clearCode || '990').trim();
+  const journals = [];
+  const close = (narration, lines) => {
+    if (!lines.length) return;
+    lines.push({ code: clear, desc: 'Balancing figure', amount: -r2(lines.reduce((a, l) => a + l.amount, 0)) });
+    journals.push({ narration, lines });
+  };
+
+  if (J.includeUoh !== false && r2(u.claim)) {
+    const code = String(J.uohCode || '300').trim(), lines = [];
+    if (S.uoh.method === 'flat') {
+      lines.push({ code, desc: `Use of Home - HMRC flat rate ${fmt0(u.flatRate)} a month x ${num(S.uoh.flatMonths)} months`, amount: r2(u.flat) });
+    } else {
+      const frac = u.roomFrac * u.timeFrac * (1 - u.shareFrac);
+      const parts = [];
+      if (u.roomFrac < 1) parts.push(`${num(S.uoh.workRooms)} of ${num(S.uoh.totalRooms)} rooms`);
+      if (u.timeFrac < 1) parts.push(`${pct(u.timeFrac)} business time`);
+      if (u.shareFrac) parts.push(`${pct(1 - u.shareFrac)} own share`);
+      const basis = parts.length ? ' @ ' + parts.join(' x ') : '';
+      S.uoh.lines.forEach(l => {
+        const amt = r2(lineAmount(l) * frac);
+        const note = String(l.note || '').trim().replace(/\s+/g, ' ');
+        if (amt) lines.push({ code, desc: `Use of Home - ${l.desc || 'Running costs'} ${fmt(lineAmount(l))}${basis}${note ? `. Note: ${note}` : ''}`, amount: amt });
+      });
+    }
+    close(`Use of Home ${ty}`, lines);
   }
-  lines.push({ code: clear, desc: `Use of Home ${S.client.taxYear} - balancing to clearing`, amount: -r2(lines.reduce((a, l) => a + l.amount, 0)) });
-  return { date, narration, lines, taxRate: J.taxRate || 'No VAT' };
+
+  if (J.includeCa !== false && r2(C.ca.total)) {
+    const code = String(J.caCode || '315').trim(), lines = [];
+    const cf = v => `TWDV c/fwd balance is ${fmtM(v)}`;
+    const poolDesc = (name, p, rateText) => {
+      const bits = [];
+      if (p.bf) bits.push(`TWDV b/fwd ${fmtM(p.bf)}`);
+      if (p.add) bits.push(`additions ${fmtM(p.add)}`);
+      if (p.aia) bits.push(`AIA ${fmtM(p.aia)}`);
+      if (p.disp) bits.push(`disposals ${fmtM(p.disp)}`);
+      bits.push(p.spa ? `small pool allowance ${fmtM(p.wda)}` : `${rateText} WDA`);
+      if (p.bc) bits.push(`balancing charge ${fmtM(p.bc)}`);
+      return `${name}: ${bits.join(', ')}, ${cf(p.cf)}`;
+    };
+    if (r2(C.ca.main.claim)) lines.push({ code, desc: poolDesc('Main pool', C.ca.main, '18%'), amount: r2(C.ca.main.claim) });
+    if (r2(C.ca.sr.claim)) lines.push({ code, desc: poolDesc('Special rate pool', C.ca.sr, '6%'), amount: r2(C.ca.sr.claim) });
+    C.ca.pools.forEach((c, i) => {
+      if (!r2(c.claim)) return;
+      const p = S.ca.pools[i], name = String(p.desc || 'Asset').replace(/^(vehicle|car|van|asset):\s*/i, '') || 'Asset';
+      const biz = c.biz < 1 ? ` and ${pct(c.biz)} business use` : '';
+      const first = (p.kind || 'car') === 'car' ? '100% first-year allowance' : '100% AIA';
+      let desc;
+      if (p.disposed) desc = `${name} sold for ${fmtM(c.disp)}, ${c.ba ? `balancing allowance ${fmtM(c.ba)}` : `balancing charge ${fmtM(c.bc)}`}${biz}`;
+      else if (c.add && c.aia) desc = `${name} purchase ${fmtM(c.add)} @ ${first}${biz}, ${cf(c.cf)}`;
+      else if (c.add && !c.bf) desc = `${name} purchase ${fmtM(c.add)} @ ${num(p.rate)}% WDA${biz}, ${cf(c.cf)}`;
+      else desc = `${name}: TWDV b/fwd ${fmtM(c.bf)}${c.add ? ` plus purchase ${fmtM(c.add)}` : ''} @ ${num(p.rate)}% WDA${biz}, ${cf(c.cf)}`;
+      lines.push({ code, desc, amount: r2(c.claim) });
+    });
+    close(`Capital allowances ${ty}`, lines);
+  }
+  return { date, journals, taxRate: J.taxRate || 'No VAT' };
 }
-function journalFileName() { return exportFileName().replace('_YE_', '_UseOfHome_Journal_').replace(/\.xlsx$/, '.csv'); }
+function journalFileName() { return exportFileName().replace('_YE_', '_Xero_Journals_').replace(/\.xlsx$/, '.csv'); }
 $('#journalBtn').onclick = () => {
   const J = journalLines();
-  if (!J.lines.length) { toast('There is no Use of Home figure to post yet.'); return; }
+  if (!J.journals.length) { toast('There is nothing to post yet.'); return; }
   const q = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
-  const csv = ['*Narration,*Date,Description,*AccountCode,*TaxRate,*Amount,TrackingName1,TrackingOption1,TrackingName2,TrackingOption2']
-    .concat(J.lines.map(l => [J.narration, J.date, l.desc, l.code, J.taxRate, l.amount.toFixed(2), '', '', '', ''].map(q).join(','))).join('\r\n');
+  const rows = J.journals.flatMap(j => j.lines.map(l => [j.narration, J.date, l.desc, l.code, J.taxRate, l.amount.toFixed(2), '', '', '', ''].map(q).join(',')));
+  const csv = ['*Narration,*Date,Description,*AccountCode,*TaxRate,*Amount,TrackingName1,TrackingOption1,TrackingName2,TrackingOption2'].concat(rows).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
   a.download = journalFileName();
