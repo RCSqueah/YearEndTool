@@ -239,21 +239,34 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
 <!-- ───────────── CLIENT EMAIL ───────────── -->
 <div data-pane="email" hidden>
   <section class="panel">
-    <div class="panel-head"><div><h2>Information request</h2><p class="muted small">Written from last year's workings. Untick anything you don't need to ask about, check the wording, then copy it into an email.</p></div></div>
+    <div class="panel-head">
+      <div><h2 data-out="emTitle">Information request</h2><p class="muted small" data-out="emIntro"></p></div>
+      <div class="seg" role="group" aria-label="Which email">
+        <button type="button" data-emkind="request">Information request</button>
+        <button type="button" data-emkind="accounts">Accounts for approval</button>
+      </div>
+    </div>
     <div class="fields">
       <label class="field"><span>Dear</span><input id="em-first" data-bind="email.firstName" placeholder="First name"></label>
       <label class="field"><span>Client's email address</span><input id="em-to" type="email" data-bind="email.to"><span class="hint">Only for "Open in email app"</span></label>
       <label class="field"><span>Reply by</span><input id="em-reply" type="date" data-bind="email.replyBy"><span class="hint">Leave blank to leave the date out</span></label>
-      <label class="check"><input type="checkbox" id="em-prior" data-bind="email.includePrior"> Show last year's figures</label>
+      <label class="check" data-emshow="request"><input type="checkbox" id="em-prior" data-bind="email.includePrior"> Show last year's figures</label>
     </div>
     <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));">
       <div style="display:grid;gap:8px;align-content:start;">
-        <h3>What to ask for</h3>
-        <div class="sec-list" id="emailSections"></div>
+        <div data-emshow="request" style="display:grid;gap:8px;"><h3>What to ask for</h3>
+        <div class="sec-list" id="emailSections"></div></div>
+        <div data-emshow="accounts" style="display:grid;gap:8px;">
+          <h3>What to include</h3>
+          <label class="check"><input type="checkbox" id="em-acc-prior" data-bind="email.acc.includePrior"> Last year's figures alongside</label>
+          <label class="check"><input type="checkbox" id="em-acc-tax" data-bind="email.acc.includeTax"> Tax due and payment dates</label>
+          <label class="check"><input type="checkbox" id="em-acc-uoh" data-bind="email.acc.includeUoh"> Use of Home and capital allowances claimed</label>
+          <div class="note info small">Attach the accounts PDF yourself: email links from a web page can't carry attachments.<div class="row-actions" style="margin-top:8px;"><button class="btn" type="button" id="emAccPdf">↓ Download accounts PDF</button></div></div>
+        </div>
         <label class="field" style="margin-top:8px;"><span>Your sign-off</span><textarea id="em-sig" rows="3"></textarea><span class="hint">Saved in this browser for every client</span></label>
       </div>
       <div style="display:grid;gap:10px;align-content:start;">
-        <label class="field"><span>Subject</span><input id="em-subject" data-bind="email.subject"></label>
+        <label class="field"><span>Subject</span><input id="em-subject"></label>
         <label class="field"><span>Email</span><textarea id="em-body"></textarea></label>
         <p class="note" id="emEdited" hidden>You've edited the email, so changes to the options above won't update it. <button class="btn link" type="button" id="emRebuild">Rebuild it from the workings</button></p>
         <div class="row-actions">
@@ -633,7 +646,8 @@ function blankState() {
     ca: { mainBf: '', mainAdd: '', mainDisp: '', mainAia: true, srBf: '', srAdd: '', srDisp: '', pools: [], notes: '', prior: { total: null, rows: [], notes: '', source: '' } },
     tax: { items: blankItems(), propAllowance: false, slPlan: 'None', slPaye: '', cb: false, children: '1', cbWeeks: '52', poaPaid: '', notes: '', prior: { notes: '' } },
     trash: [],
-    email: { firstName: '', to: '', replyBy: '', includePrior: true, subject: '', text: '', edited: false, off: {} },
+    email: { kind: 'request', firstName: '', to: '', replyBy: '', includePrior: true, subject: '', text: '', edited: false, off: {},
+      acc: { subject: '', text: '', edited: false, includePrior: true, includeTax: true, includeUoh: true } },
     accounts: { xero: [], xeroFile: '', xeroNet: null, map: {}, adj: {}, addTool: null, prior: {}, priorSource: '', approvalDate: '', reportDate: '' },
   };
 }
@@ -1492,9 +1506,53 @@ function composeEmail() {
   return body.join('\n');
 }
 
+// The email being edited: the information request, or the accounts for approval.
+const emailDoc = () => (S.email.kind === 'accounts' ? S.email.acc : S.email);
+
+function composeAccountsEmail() {
+  const st = S, e = st.email, a = e.acc, C = compute(), F = plFigures(st, C), T = C.tax;
+  const first = (e.firstName || String(st.client.name || '').trim().split(/\s+/)[0] || '').trim();
+  const ey = T.endYear + 1, P = a.includePrior !== false && F.prior;
+  const vs = v => (P && v != null ? ` (last year ${fmt0(v)})` : '');
+  const lines = [
+    `Dear ${first || 'Sir or Madam'},`,
+    '',
+    `Please find attached your accounts for the year ended ${longDate(st.client.end)}. In summary:`,
+    '',
+    `- Turnover: ${fmt0(F.now.sales)}${vs(P && P.sales)}`,
+    `- Expenses: ${fmt0(F.now.cos + F.now.exp)}${vs(P && P.cos + P.exp)}`,
+    `- Net profit: ${fmt0(F.now.net)}${vs(P && P.net)}`,
+  ];
+  if (a.includeUoh !== false) {
+    if (C.uoh.figure) lines.push(`- Use of Home claimed: ${fmt(C.uoh.figure)}`);
+    if (C.ca.figure) lines.push(`- Capital allowances claimed: ${fmt(C.ca.figure)}`);
+  }
+  if (a.includeTax !== false) {
+    lines.push('', `Your tax for ${st.client.taxYear}:`, '', `- Income tax and National Insurance${T.sl || T.hicbc ? ', including student loan and Child Benefit charge' : ''}: ${fmt(T.liability)}`);
+    if (T.atSource) lines.push(`- Less tax already paid through PAYE: ${fmt(T.atSource)}`);
+    if (num(st.tax.poaPaid)) lines.push(`- Less payments on account already made: ${fmt(num(st.tax.poaPaid))}`);
+    lines.push(`- Balancing payment due by 31 January ${ey}: ${fmt(T.balancing)}`);
+    if (T.poa) {
+      lines.push(`- First payment on account for ${T.endYear}/${String(ey).slice(2)}, also due by 31 January ${ey}: ${fmt(T.poa)}`);
+      lines.push(`- Total to pay by 31 January ${ey}: ${fmt(T.janTotal)}`);
+      lines.push(`- Second payment on account due by 31 July ${ey}: ${fmt(T.poa)}`);
+    }
+  }
+  lines.push('',
+    `Please check the accounts, and if you're happy with them, sign and date the Client Approval page and send it back to me. Once I have it, I'll file your tax return${a.includeTax !== false ? ' and confirm the figures above' : ''}.`,
+    '', "If anything isn't clear, just reply to this email or give me a call.", '', 'Kind regards,', signature());
+  return lines.join('\n');
+}
+
 function renderEmail() {
-  const e = S.email;
+  const e = S.email, accMode = e.kind === 'accounts', d = emailDoc();
   if (!has(e.subject)) e.subject = `Your ${S.client.taxYear} tax return: information needed`;
+  if (!has(e.acc.subject)) e.acc.subject = `Your accounts for the year ended ${longDate(S.client.end)}`;
+  $$('[data-emkind]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.emkind === e.kind)));
+  $$('[data-emshow]').forEach(el => { el.hidden = el.dataset.emshow !== e.kind; });
+  out('emTitle', accMode ? 'Accounts for approval' : 'Information request');
+  out('emIntro', accMode ? 'Sends the accounts with a summary of the profit and the tax due, and asks the client to sign the Client Approval page.'
+    : "Written from last year's workings. Untick anything you don't need to ask about, check the wording, then copy it into an email.");
   const box = (key, title, sub, on, child) => `<label class="check${child ? ' sub' : ''}"><input type="checkbox" data-email-sec="${esc(key)}" ${on ? 'checked' : ''}>
     <span><b>${esc(title)}</b>${sub ? `<br><span class="muted small">${esc(sub)}</span>` : ''}</span></label>`;
   $('#emailSections').innerHTML = emailSections().map(x => {
@@ -1503,15 +1561,21 @@ function renderEmail() {
     const subs = parts.length > 1 ? `<div class="sec-items"${on ? '' : ' hidden'}>${parts.map(p => box(`${x.key}:${p.id}`, p.label, p.sub, !isOff(`${x.key}:${p.id}`), true)).join('')}</div>` : '';
     return `<div class="sec-group">${box(x.key, x.title, x.summary, on)}${subs}</div>`;
   }).join('');
-  if (!e.edited) e.text = composeEmail();
+  if (!d.edited) d.text = accMode ? composeAccountsEmail() : composeEmail();
   const body = $('#em-body');
-  if (document.activeElement !== body) body.value = e.text;
-  $('#emEdited').hidden = !e.edited;
+  if (document.activeElement !== body) body.value = d.text;
+  $('#emEdited').hidden = !d.edited;
   const sig = $('#em-sig'); if (document.activeElement !== sig) sig.value = signature();
-  const subj = $('#em-subject'); if (document.activeElement !== subj) subj.value = e.subject;
-  $('#emMail').href = `mailto:${encodeURIComponent(e.to || '')}?subject=${encodeURIComponent(e.subject)}&body=${encodeURIComponent(e.text)}`;
+  const subj = $('#em-subject'); if (document.activeElement !== subj) subj.value = d.subject;
+  setMailLink();
   save();
 }
+function setMailLink() { const d = emailDoc(); $('#emMail').href = `mailto:${encodeURIComponent(S.email.to || '')}?subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.text)}`; }
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-emkind]');
+  if (!b) return;
+  S.email.kind = b.dataset.emkind; renderEmail();
+});
 document.addEventListener('change', ev => {
   const k = ev.target.dataset && ev.target.dataset.emailSec;
   if (!k) return;
@@ -1519,20 +1583,20 @@ document.addEventListener('change', ev => {
   renderEmail();
 });
 $('#em-body').addEventListener('input', ev => {
-  S.email.text = ev.target.value; S.email.edited = true;
+  const d = emailDoc(); d.text = ev.target.value; d.edited = true;
   $('#emEdited').hidden = false;
-  $('#emMail').href = `mailto:${encodeURIComponent(S.email.to || '')}?subject=${encodeURIComponent(S.email.subject)}&body=${encodeURIComponent(S.email.text)}`;
-  save();
+  setMailLink(); save();
 });
 $('#em-sig').addEventListener('input', ev => { try { localStorage.setItem(SIG_KEY, ev.target.value); } catch (_) {} renderEmail(); });
-$('#emRebuild').onclick = () => { S.email.edited = false; renderEmail(); toast('Email rebuilt from the workings.'); };
-$('#em-subject').addEventListener('input', () => renderEmail());
+$('#emRebuild').onclick = () => { emailDoc().edited = false; renderEmail(); toast('Email rebuilt from the workings.'); };
+$('#em-subject').addEventListener('input', ev => { emailDoc().subject = ev.target.value; setMailLink(); save(); });
+$('#emAccPdf').onclick = () => $('#accPdfBtn').click();
 async function copyText(text, el, what) {
   try { await navigator.clipboard.writeText(text); toast(`Copied the ${what}.`); }
   catch (_) { el.focus(); el.select(); toast(`Press Ctrl+C to copy the ${what}.`); }
 }
-$('#emCopy').onclick = () => copyText(S.email.text, $('#em-body'), 'email');
-$('#emCopySubject').onclick = () => copyText(S.email.subject, $('#em-subject'), 'subject');
+$('#emCopy').onclick = () => copyText(emailDoc().text, $('#em-body'), 'email');
+$('#emCopySubject').onclick = () => copyText(emailDoc().subject, $('#em-subject'), 'subject');
 
 // ── Accounts: Profit and Loss and the accounts PDF ─────────────────────────
 // The firm's Profit and Loss lines, in the order the accounts print them.
