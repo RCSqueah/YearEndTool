@@ -167,6 +167,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     </div>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="client" aria-selected="true">Client &amp; import</button>
+      <button role="tab" data-tab="docs">Documents</button>
       <button role="tab" data-tab="uoh">Use of Home</button>
       <button role="tab" data-tab="ca">Capital allowances</button>
       <button role="tab" data-tab="accounts">Accounts</button>
@@ -322,6 +323,21 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
   <section class="panel">
     <div class="panel-head"><div><h2>Information received</h2><p class="muted small">What the information request asked for. Tick what the client has given you.</p></div><span class="chip" data-out="mtReceived"></span></div>
     <div class="sec-list" id="mtReceivedList"></div>
+  </section>
+  </div>
+</div>
+
+<!-- ───────────── DOCUMENTS (the Extraction Tool) ───────────── -->
+<div data-pane="docs" hidden>
+  <div class="stack">
+  <section class="panel">
+    <div class="panel-head">
+      <div><h2>Client documents</h2><p class="muted small">The Extraction Tool, inside this page. Drop in the year's bank statements, receipts and emails, check the coding, then click <b>Send to Year End Tool</b>. The lines fill the Use of Home tab and the Accounts tab's Profit and Loss, as a Bank CSV would.</p></div>
+      <a class="btn" id="docsOpenNew" href="../ExtractionTool/" target="_blank" rel="noopener">Open in a new tab ↗</a>
+    </div>
+    <div class="note info" id="docsInbox" hidden></div>
+    <div id="docsBatches" style="display:grid;gap:6px;"></div>
+    <iframe id="docsFrame" title="Extraction Tool" style="width:100%;height:1100px;border:1px solid var(--rule);border-radius:4px;background:#fff;"></iframe>
   </section>
   </div>
 </div>
@@ -1289,6 +1305,7 @@ function showTab(name) {
   try { sessionStorage.setItem('yearEnd:tab', name); } catch (_) {}
   if (name === 'email') renderEmail();
   if (name === 'meeting') renderReceived();
+  if (name === 'docs') { openDocuments(); renderBatches(); }
 }
 
 function calcRow(label, val, cls = '', prior) {
@@ -2326,6 +2343,91 @@ $('#mtAddMiles').onclick = () => {
   renderLists(); refresh(); toast(`Added mileage of ${fmt(mileageAmount(m))}.`);
 };
 
+// ── Documents: the Extraction Tool ─────────────────────────────────────────
+// Both tools are on the same site, so the Extraction Tool runs inside this
+// page with its own key, clients and coding rules. Its "Send to Year End
+// Tool" button posts the coded lines here as Bank and Bills CSVs; opened on
+// its own, it leaves them in this browser's shared storage instead.
+const EXTRACTION_URL = '../ExtractionTool/';
+const INBOX_KEY = 'yearEnd:inbox';
+function openDocuments() {
+  const fr = $('#docsFrame');
+  const url = `${EXTRACTION_URL}?client=${encodeURIComponent(S.client.name || '')}&from=yearend`;
+  $('#docsOpenNew').href = url;
+  if (fr.dataset.client !== (S.client.name || '') || !fr.src) { fr.src = url; fr.dataset.client = S.client.name || ''; }
+  renderInbox();
+}
+function readInbox() { try { return JSON.parse(localStorage.getItem(INBOX_KEY) || '[]') || []; } catch (_) { return []; } }
+function writeInbox(list) { try { localStorage.setItem(INBOX_KEY, JSON.stringify(list)); } catch (_) {} }
+const sameClient = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+function receiveFromExtraction(msg) {
+  const files = (msg.files || []).filter(f => f && f.csv);
+  if (!files.length) { toast('Nothing was sent: the Extraction Tool had no lines to post.'); return; }
+  if (msg.client && S.client.name && !sameClient(msg.client, S.client.name)) logMsg('warn', `Lines sent from the Extraction Tool for ${msg.client}, but this is ${S.client.name}'s workings. They were added anyway; check the client.`);
+  if (!S.client.name && msg.client) S.client.name = msg.client;
+  files.forEach(f => importCsv(f.name, f.csv));
+  const lines = files.reduce((a, f) => a + (f.count || 0), 0);
+  logMsg('ok', `Extraction Tool: ${lines} line${lines !== 1 ? 's' : ''} received for ${msg.client || 'this client'}${msg.batch ? ` (${msg.batch})` : ''}. Sending the same job again replaces them.`);
+  renderLists(); refresh(); renderBatches();
+  toast(`Received ${lines} line${lines !== 1 ? 's' : ''} from the Extraction Tool.`);
+}
+window.addEventListener('message', e => {
+  if (e.origin !== location.origin || !e.data || e.data.type !== 'extraction-tool:year-end') return;
+  receiveFromExtraction(e.data);
+});
+// Batches received: every imported file, with its lines in the accounts and
+// Use of Home, and a way to take one out again.
+function importedBatches() {
+  const names = new Set((S.accounts.xero || []).map(l => l.file).filter(Boolean));
+  S.uoh.lines.forEach(l => Object.keys(l.imp || {}).forEach(k => names.add(k)));
+  return [...names].map(name => ({
+    name,
+    accounts: (S.accounts.xero || []).filter(l => l.file === name).reduce((a, l) => a + (l.count || 0), 0),
+    uoh: r2(S.uoh.lines.reduce((a, l) => a + ((l.imp || {})[name] || 0), 0)),
+  }));
+}
+function removeBatch(name) {
+  S.accounts.xero = (S.accounts.xero || []).filter(l => l.file !== name);
+  S.accounts.xeroFile = [...new Set(S.accounts.xero.map(l => l.file))].join(', ');
+  S.uoh.lines.forEach(l => { if (l.imp) delete l.imp[name]; });
+  S.uoh.lines = S.uoh.lines.filter(l => has(l.expr) || l.prior != null || Object.keys(l.imp || {}).length || l.note);
+  logMsg('ok', `${name}: removed from these workings.`);
+  renderLists(); refresh(); toast(`Removed ${name}.`);
+}
+function renderBatches() {
+  const list = importedBatches();
+  $('#docsBatches').innerHTML = list.length ? `<h3>Received</h3>` + list.map((bt, i) => `<div class="row-actions"><span>${esc(bt.name)}: ${bt.accounts} line${bt.accounts !== 1 ? 's' : ''} in the accounts${bt.uoh ? `, ${fmt(bt.uoh)} of Use of Home costs` : ''}</span>
+    <button class="btn link danger" type="button" data-batch-remove="${i}">Remove</button></div>`).join('') : '';
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-batch-remove]');
+  if (!t) return;
+  const bt = importedBatches()[+t.dataset.batchRemove];
+  if (bt) { removeBatch(bt.name); renderBatches(); }
+});
+
+// Lines sent while the Extraction Tool was open on its own.
+function renderInbox() {
+  const box = $('#docsInbox'), list = readInbox();
+  const mine = list.map((m, i) => ({ m, i })).filter(({ m }) => !S.client.name || sameClient(m.client, S.client.name));
+  box.hidden = !mine.length;
+  if (!mine.length) return;
+  box.innerHTML = `<b>Waiting from the Extraction Tool</b>` + mine.map(({ m, i }) => {
+    const n = (m.files || []).reduce((a, f) => a + (f.count || 0), 0);
+    return `<div class="row-actions" style="margin-top:6px;"><span>${esc(m.client || 'No client')}: ${n} line${n !== 1 ? 's' : ''}, sent ${esc(new Date(m.sentAt).toLocaleString('en-GB'))}</span>
+      <button class="btn" type="button" data-inbox-take="${i}">Add to these workings</button><button class="btn link danger" type="button" data-inbox-drop="${i}">Discard</button></div>`;
+  }).join('');
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-inbox-take],[data-inbox-drop]');
+  if (!t) return;
+  const list = readInbox(), i = +(t.dataset.inboxTake ?? t.dataset.inboxDrop), msg = list[i];
+  list.splice(i, 1); writeInbox(list);
+  if (t.dataset.inboxTake != null && msg) receiveFromExtraction(msg);
+  renderInbox();
+});
+window.addEventListener('focus', () => { if (!$('[data-pane="docs"]').hidden) renderInbox(); });
+
 // ── Rates editor ───────────────────────────────────────────────────────────
 function renderRates() {
   const year = S.client.taxYear;
@@ -2850,7 +2952,11 @@ function importXeroTransactions(name, head, body) {
 }
 
 function addUohImports(name, found, outside) {
-  if (!found.length) { logMsg('warn', `${name}: no lines coded to account ${S.imp.uohCode}${outside ? ` inside the period (${outside} outside)` : ''}.`); return; }
+  if (!found.length) {
+    S.uoh.lines.forEach(l => { if (l.imp) delete l.imp[name]; });
+    if (outside) logMsg('warn', `${name}: no Use of Home lines inside the period (${outside} outside).`);
+    return;
+  }
   // Clear this file's earlier contribution so dropping it in twice doesn't double up.
   S.uoh.lines.forEach(l => { if (l.imp) delete l.imp[name]; });
   // Items that only came from imports and now have nothing in them go.
