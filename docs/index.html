@@ -2398,9 +2398,16 @@ function addUohImports(name, found, outside) {
   if (!found.length) { logMsg('warn', `${name}: no lines coded to account ${S.imp.uohCode}${outside ? ` inside the period (${outside} outside)` : ''}.`); return; }
   // Clear this file's earlier contribution so dropping it in twice doesn't double up.
   S.uoh.lines.forEach(l => { if (l.imp) delete l.imp[name]; });
+  // Items that only came from imports and now have nothing in them go.
+  S.uoh.lines = S.uoh.lines.filter(l => has(l.expr) || l.prior != null || Object.keys(l.imp || {}).length || l.note);
+  // A payee without a clear category takes the category of the same payee
+  // elsewhere, e.g. "Wandsworth" follows "Wandsworth Council Tax".
+  const firstWord = w => String(w || '').trim().split(/\s+/)[0].toLowerCase();
+  const byPayee = {};
+  found.forEach(it => { const c = categoryOf(`${it.who} ${it.desc}`); if (c && firstWord(it.who)) byPayee[firstWord(it.who)] ||= c; });
   const groups = new Map();
   found.forEach(it => {
-    const key = categoryOf(`${it.who} ${it.desc}`) || String(it.who || it.desc || 'Other').trim();
+    const key = categoryOf(`${it.who} ${it.desc}`) || byPayee[firstWord(it.who)] || String(it.who || it.desc || 'Other').trim();
     groups.set(key, r2((groups.get(key) || 0) + it.amt));
   });
   let matched = 0, added = 0;
