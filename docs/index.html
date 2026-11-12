@@ -173,6 +173,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
       <button role="tab" data-tab="tax">Tax</button>
       <button role="tab" data-tab="return">Tax return</button>
       <button role="tab" data-tab="email">Client email</button>
+      <button role="tab" data-tab="meeting">Meeting</button>
       <button role="tab" data-tab="export">Export</button>
     </nav>
   </div>
@@ -278,6 +279,51 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
       </div>
     </div>
   </section>
+</div>
+
+<!-- ───────────── MEETING ───────────── -->
+<div data-pane="meeting" hidden>
+  <div class="stack">
+  <section class="panel">
+    <div class="panel-head"><div><h2>Year end meeting</h2><p class="muted small">The meeting date fills the Client Approval date on the accounts PDF, unless one is set on the Accounts tab.</p></div></div>
+    <div class="fields">
+      <label class="field"><span>Meeting date</span><input id="mt-date" type="date" data-bind="meeting.date"></label>
+      <label class="field"><span>How</span><select id="mt-how" data-bind="meeting.how"><option>In person</option><option>Phone</option><option>Video call</option></select></label>
+      <label class="field field-wide"><span>Who attended</span><input id="mt-who" data-bind="meeting.attendees" placeholder="e.g. John Vandoros, Stephen Queah"></label>
+      <label class="field field-wide"><span>Notes</span><textarea id="mt-notes" data-bind="meeting.notes" placeholder="What was discussed and agreed"></textarea></label>
+    </div>
+    <div class="field" id="mtPriorNotesWrap"><span>Last year's meeting notes</span><div class="prior-text" data-out="mtPriorNotes"></div></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><div><h2>Adjustments agreed</h2><p class="muted small">Each line goes into the Accounts tab's Profit and Loss (and from there the Tax tab), and into a "Meeting adjustments" journal balanced to the clearing account.</p></div><span class="chip" data-out="mtAdjTotal"></span></div>
+    <div class="table-wrap">
+      <table class="items">
+        <thead><tr><th>Date</th><th>What</th><th>Goes in</th><th>Account</th><th>Type</th><th class="n">Amount £</th><th class="n">Business %</th><th class="n">Effect on profit</th><th></th></tr></thead>
+        <tbody id="mtAdj"></tbody>
+      </table>
+    </div>
+    <div class="row-actions">
+      <button class="btn" type="button" id="mtAddAdj">+ Add adjustment</button>
+      <span class="muted small">Mileage at HMRC rates:</span>
+      <input class="num" id="mt-miles" inputmode="decimal" placeholder="Business miles" style="width:140px;" aria-label="Business miles">
+      <button class="btn" type="button" id="mtAddMiles">Add mileage</button>
+      <span class="muted small" data-out="mtMilesHint">45p a mile for the first 10,000, then 25p</span>
+    </div>
+    <p class="note" data-out="mtCodeWarn" hidden></p>
+    <div class="trash" data-trash="meet"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><div><h2>Checklist</h2><p class="muted small">Post-meeting checklist from the working papers, with last year's answers.</p></div></div>
+    <div class="table-wrap"><table class="items"><thead><tr><th>Question</th><th>Last year</th><th>This year</th><th>Note</th></tr></thead><tbody id="mtChecklist"></tbody></table></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><div><h2>Information received</h2><p class="muted small">What the information request asked for. Tick what the client has given you.</p></div><span class="chip" data-out="mtReceived"></span></div>
+    <div class="sec-list" id="mtReceivedList"></div>
+  </section>
+  </div>
 </div>
 
 <!-- ───────────── USE OF HOME ───────────── -->
@@ -430,7 +476,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     <div class="panel-head"><div><h2>Accounts PDF</h2><p class="muted small">Cover, Directory, Client Approval, Accountants' and Bookkeepers' Report, and Profit and Loss.</p></div></div>
     <div class="fields">
       <label class="field field-wide"><span>Client's address</span><input id="ac-address" data-bind="client.address" placeholder="e.g. 74 Gideon Road, London, SW11 5UT"></label>
-      <label class="field"><span>Client approval date</span><input id="ac-approve" type="date" data-bind="accounts.approvalDate"><span class="hint">Blank uses today</span></label>
+      <label class="field"><span>Client approval date</span><input id="ac-approve" type="date" data-bind="accounts.approvalDate"><span class="hint">Blank uses the meeting date, or today</span></label>
       <label class="field"><span>Report date</span><input id="ac-report" type="date" data-bind="accounts.reportDate"><span class="hint">Blank uses today</span></label>
     </div>
     <details>
@@ -534,6 +580,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     <div class="checks">
       <label class="check"><input type="checkbox" id="j-incuoh" data-bind="journal.includeUoh"> Use of Home</label>
       <label class="check"><input type="checkbox" id="j-incca" data-bind="journal.includeCa"> Capital allowances</label>
+      <label class="check"><input type="checkbox" id="j-incmeet" data-bind="journal.includeMeeting"> Meeting adjustments</label>
     </div>
     <div class="fields">
       <label class="field"><span>Use of Home account code</span><input id="j-uoh" data-bind="journal.uohCode"></label>
@@ -644,7 +691,7 @@ function blankState() {
     client: { name: '', taxYear: '2025/26', start: '2025-04-06', end: '2026-04-05', basis: 'Cash basis', address: '' },
     imp: { uohCode: '300', inPeriodOnly: true, log: [], chart: [] },
     profit: { source: null, turnover: '', otherIncome: '', expenses: '', netOverride: '', adjustments: '', prior: {} },
-    journal: { uohCode: '300', caCode: '315', clearCode: '990', date: '', taxRate: 'No VAT', includeUoh: true, includeCa: true },
+    journal: { uohCode: '300', caCode: '315', clearCode: '990', date: '', taxRate: 'No VAT', includeUoh: true, includeCa: true, includeMeeting: true },
     uoh: {
       method: 'actual', lines: [], totalRooms: '', workRooms: '', timeMode: 'hours', hours: '', dayHours: '7.5', days: '', timePct: '',
       shared: false, sharedPct: '50', flatHours: '', flatMonths: '12', notes: '',
@@ -653,6 +700,7 @@ function blankState() {
     ca: { mainBf: '', mainAdd: '', mainDisp: '', mainAia: true, srBf: '', srAdd: '', srDisp: '', pools: [], notes: '', prior: { total: null, rows: [], notes: '', source: '' } },
     tax: { items: blankItems(), propAllowance: false, slPlan: 'None', slPaye: '', cb: false, children: '1', cbWeeks: '52', poaPaid: '', notes: '', prior: { notes: '' } },
     trash: [],
+    meeting: { date: '', how: 'In person', attendees: '', notes: '', questions: [], answers: {}, received: {}, adj: [], prior: { answers: {}, notes: '' } },
     email: { kind: 'request', firstName: '', to: '', replyBy: '', includePrior: true, subject: '', text: '', edited: false, off: {},
       acc: { subject: '', text: '', edited: false, includePrior: true, includeTax: true, includeUoh: true } },
     accounts: { xero: [], xeroFile: '', xeroNet: null, map: {}, adj: {}, addTool: null, prior: {}, priorSource: '', approvalDate: '', reportDate: '' },
@@ -1136,6 +1184,7 @@ function renderLists() {
   }).join('') || '<p class="muted small">None. Each vehicle with private use goes in its own pool.</p>';
 
   renderTaxSections();
+  renderMeeting();
   renderTrash();
   bindAll();
 }
@@ -1171,7 +1220,7 @@ function renderTaxSections() {
 }
 
 // ── Removing and restoring lines ───────────────────────────────────────────
-function listFor(area, sec) { return area === 'uoh' ? S.uoh.lines : area === 'pool' ? S.ca.pools : S.tax.items[sec]; }
+function listFor(area, sec) { return area === 'uoh' ? S.uoh.lines : area === 'pool' ? S.ca.pools : area === 'meet' ? S.meeting.adj : S.tax.items[sec]; }
 function removeItem(area, sec, i) {
   const list = listFor(area, sec);
   const [item] = list.splice(i, 1);
@@ -1239,6 +1288,7 @@ function showTab(name) {
   $$('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== name; });
   try { sessionStorage.setItem('yearEnd:tab', name); } catch (_) {}
   if (name === 'email') renderEmail();
+  if (name === 'meeting') renderReceived();
 }
 
 function calcRow(label, val, cls = '', prior) {
@@ -1383,6 +1433,7 @@ function refresh() {
     : `<tr><td class="box">${esc(page)}</td><td class="box">${esc(box)}</td><td>${esc(entry)}</td><td class="n">${cell(now)}</td><td class="n muted">${cell(prior)}</td></tr>`).join('');
 
   renderAccounts(C);
+  refreshMeeting();
   out('exportName', esc(exportFileName()));
   const J = journalLines(C);
   $('#journalTable').innerHTML = J.journals.map(j => `<tr class="group"><td colspan="5">${esc(j.narration)}</td></tr>` +
@@ -1710,9 +1761,10 @@ function plFigures(st = S, C = compute(st)) {
     const xero = r2((A.xero || []).filter(x => plKeyFor(st, x) === l.key).reduce((a, x) => a + ((l.group === 'sales') === (x.type === 'sales') ? x.amount : -x.amount), 0));
     const tool = addTool ? (l.key === 'uoh' ? C.uoh.figure : l.key === 'capex' ? C.ca.figure : 0) : 0;
     const adj = num((A.adj || {})[l.key]);
-    const value = r2(xero + adj + tool);
+    const meet = (meetingEffects(st)[l.key] || 0);
+    const value = r2(xero + adj + tool + meet);
     const prior = A.prior && A.prior[l.key] != null ? A.prior[l.key] : null;
-    rows[l.key] = { ...l, xero, tool, adj, value, shown: Math.round(value), prior };
+    rows[l.key] = { ...l, xero, tool, adj, meet, value, shown: Math.round(value), prior };
   });
   const sum = (g, f) => PL_LINES.filter(l => l.group === g).reduce((a, l) => a + (f(rows[l.key]) || 0), 0);
   const anyPrior = PL_LINES.some(l => rows[l.key].prior != null);
@@ -1781,7 +1833,7 @@ function renderAccounts(C) {
     if (r.kind === 'gap' || r.kind === 'head') return;
     if (r.kind !== 'line') { out(`pl-tn-${i}`, w(r.now)); out(`pl-tp-${i}`, pr(r.prior)); return; }
     const row = F.rows[PL_LINES.find(l => l.label === r.label).key], k = row.key;
-    out(`pl-t-${k}`, row.tool ? `incl. ${fmt(row.tool)} from this tool` : '');
+    out(`pl-t-${k}`, [row.tool ? `incl. ${fmt(row.tool)} from this tool` : '', row.meet ? `incl. ${fmt(row.meet)} from the meeting` : ''].filter(Boolean).join('; '));
     out(`pl-x-${k}`, row.xero ? fmt(row.xero) : '<span class="muted">–</span>');
     out(`pl-n-${k}`, w(r.now)); out(`pl-p-${k}`, pr(r.prior));
   });
@@ -2063,7 +2115,7 @@ async function buildAccountsPdf() {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const F = plFigures(S), f = firm(), name = S.client.name || 'Client', end = longDate(S.client.end), yrs = plYears();
   const today = longDate(ymd(new Date()));
-  const approve = has(S.accounts.approvalDate) ? longDate(S.accounts.approvalDate) : today;
+  const approve = has(S.accounts.approvalDate) ? longDate(S.accounts.approvalDate) : has(S.meeting.date) ? longDate(S.meeting.date) : today;
   const report = has(S.accounts.reportDate) ? longDate(S.accounts.reportDate) : today;
   const L = 53, W = 487;
   const t = (str, x, y, size, bold, opts = {}) => { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.text(String(str), x, y, { baseline: 'top', ...opts }); };
@@ -2142,6 +2194,136 @@ $('#accPreviewBtn').onclick = async () => {
     if (fr.dataset.url) URL.revokeObjectURL(fr.dataset.url);
     fr.dataset.url = URL.createObjectURL(doc.output('blob')); fr.src = fr.dataset.url; fr.hidden = false;
   } catch (e) { console.error(e); toast('Could not make the PDF: ' + e.message); }
+};
+
+// ── Meeting ────────────────────────────────────────────────────────────────
+// The post-meeting checklist from the firm's working papers.
+const MEETING_QUESTIONS = [
+  'Is there any outstanding information?', 'Any VAT queries, or is the client close to the VAT registration threshold?',
+  'Is the client aware of the specialist treatment for barristers and VAT? (i.e. 2 court suits, etc.)',
+  'Are all invoices and receipts kept? Provide a comment on the standard of record keeping', 'Is the client aware of the cash basis?',
+  'Is the client aware of the tapering of personal allowances when income exceeds £100k?',
+  'Appropriate to discuss retention of personal allowance through pension contributions?',
+  'Does the client understand how tax relief on pension contributions is obtained?',
+  'Should we remind the client about pension contributions before 5 April next year?', 'Does the client have a will?',
+  'Does the client need IHT planning?', 'Should the client consider meeting with an IFA?', 'Should we consider a SA303 application?',
+  'Is the client aware of our Tax Investigation Service?', 'Does the client make interim payments?', 'Are there any concerns regarding MTD?',
+  'Is the client aware of the long-term objectives of MTD?', 'Is the client aware of incorporation - and the advantages/disadvantages',
+  'Is it appropriate for the client to employ their spouse?', 'If client has rental property:',
+  '- Is the client aware of changes to relief on finance costs?', '- Is the client aware of changes to PPR?', '- Is the client aware of new timings of payment for CGT?',
+  'Confirm that the client does not have any foreign income that has not been disclosed?', 'Confirm that client understands all capital gains must be disclosed?',
+  'Is there any anyone in chambers who might benefit from a talk/seminar?', 'Any questions from client?', 'Confirm that there are no anti-money laundering concerns',
+];
+const meetingQuestions = (st = S) => (st.meeting.questions && st.meeting.questions.length ? st.meeting.questions : MEETING_QUESTIONS);
+const MEET_TYPES = [['paid', 'Paid personally'], ['private', 'Private use'], ['income', 'Income not banked']];
+// Account code for a Profit and Loss line: from this client's imported accounts, else the usual code.
+function codeForKey(key) {
+  const fromImport = (S.accounts.xero || []).find(x => x.code && plKeyFor(S, x) === key);
+  if (fromImport) return fromImport.code;
+  const usual = Object.entries(CODE_LINES).find(([, v]) => v[1] === key);
+  return usual ? usual[0] : '';
+}
+// Each adjustment's effect on profit (costs paid personally lower it; private use and income raise it).
+function meetingLineEffects(st = S) {
+  return (st.meeting.adj || []).map(a => {
+    const amt = num(a.amount);
+    if (a.type === 'private') return r2(amt);
+    if (a.type === 'income') return r2(amt);
+    const biz = has(a.biz) ? Math.min(Math.max(num(a.biz), 0), 100) : 100;
+    return -r2(amt * biz / 100);
+  });
+}
+// The same, per Profit and Loss line, in the line's own sign.
+function meetingEffects(st = S) {
+  const out = {};
+  (st.meeting.adj || []).forEach(a => {
+    if (!a.key) return;
+    const amt = num(a.amount);
+    let v;
+    if (a.type === 'private') v = -amt;
+    else if (a.type === 'income') v = amt;
+    else v = amt * (has(a.biz) ? Math.min(Math.max(num(a.biz), 0), 100) : 100) / 100;
+    out[a.key] = r2((out[a.key] || 0) + v);
+  });
+  return out;
+}
+// What the information request asks for, one line per item.
+function receivedItems() {
+  return emailSections().filter(x => !isOff(x.key)).flatMap(x => [...x.list, ...x.asks].filter(p => !isOff(`${x.key}:${p.id}`))
+    .map(p => ({ key: `${x.key}:${p.id}`, label: `${x.title}: ${p.label}` })));
+}
+function renderMeeting() {
+  const M = S.meeting;
+  // Adjustments
+  const keyOpts = PL_LINES.map(l => `<option value="${l.key}">${esc(l.label)}</option>`).join('');
+  $('#mtAdj').innerHTML = M.adj.map((a, i) => `<tr>
+    <td><input type="date" id="mta-d-${i}" data-bind="meeting.adj.${i}.date" aria-label="Date" style="width:140px;"></td>
+    <td><input id="mta-w-${i}" data-bind="meeting.adj.${i}.desc" aria-label="What" placeholder="e.g. Phone bill paid personally" style="width:260px;"></td>
+    <td><select id="mta-k-${i}" data-bind="meeting.adj.${i}.key" data-rerender="1" aria-label="Goes in" style="width:200px;">${keyOpts}</select></td>
+    <td><input id="mta-c-${i}" data-bind="meeting.adj.${i}.code" aria-label="Account code" style="width:70px;" placeholder="${esc(codeForKey(a.key))}"></td>
+    <td><select id="mta-t-${i}" data-bind="meeting.adj.${i}.type" data-rerender="1" aria-label="Type" style="width:160px;">${MEET_TYPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></td>
+    <td class="n"><input class="num" id="mta-a-${i}" data-bind="meeting.adj.${i}.amount" inputmode="decimal" aria-label="Amount" style="width:100px;"></td>
+    <td class="n">${a.type === 'paid' ? `<input class="num" id="mta-b-${i}" data-bind="meeting.adj.${i}.biz" inputmode="decimal" aria-label="Business %" style="width:70px;">` : '<span class="muted">–</span>'}</td>
+    <td class="n prior-cell" data-out="mta-e-${i}"></td>
+    <td><button class="btn link danger" type="button" data-del="meet" data-i="${i}" aria-label="Remove">✕</button></td></tr>`).join('')
+    || '<tr><td colspan="9" class="muted">None yet. Add anything the client tells you about, such as costs paid personally, private use or income not banked.</td></tr>';
+  // Checklist
+  $('#mtChecklist').innerHTML = meetingQuestions().map((q, i) => {
+    const sub = /^-\s/.test(q), head = /:$/.test(q);
+    return `<tr><td style="min-width:260px;${sub ? 'padding-left:24px;' : ''}">${esc(q.replace(/^-\s*/, ''))}</td>
+      <td class="muted small">${esc(M.prior.answers[q] || '')}</td>
+      <td style="min-width:110px;">${head ? '' : `<select id="mtq-a-${i}" data-mtq="${i}" data-f="a" aria-label="Answer"><option value=""></option><option>YES</option><option>NO</option><option>N/A</option></select>`}</td>
+      <td style="min-width:220px;">${head ? '' : `<input id="mtq-n-${i}" data-mtq="${i}" data-f="note" aria-label="Note">`}</td></tr>`;
+  }).join('');
+  $$('[data-mtq]').forEach(el => { const q = meetingQuestions()[+el.dataset.mtq]; el.value = ((M.answers[q] || {})[el.dataset.f]) || ''; });
+  renderReceived();
+}
+function renderReceived() {
+  const M = S.meeting, list = receivedItems();
+  $('#mtReceivedList').innerHTML = list.map(r => `<label class="check"><input type="checkbox" data-received="${esc(r.key)}" ${M.received[r.key] ? 'checked' : ''}> <span>${esc(r.label)}</span></label>`).join('')
+    || '<p class="muted small">Nothing to tick off: the information request is empty.</p>';
+  out('mtReceived', list.length ? `${list.filter(r => M.received[r.key]).length} of ${list.length} received` : '');
+}
+function refreshMeeting() {
+  const M = S.meeting, eff = meetingLineEffects();
+  eff.forEach((e, i) => out('mta-e-' + i, e ? fmt(e) : '–'));
+  const total = r2(eff.reduce((a, b) => a + b, 0));
+  out('mtAdjTotal', M.adj.length ? `Profit ${total >= 0 ? '+' : ''}${fmt(total)}` : '');
+  const noCode = M.adj.filter(a => num(a.amount) && !has(a.code) && !codeForKey(a.key));
+  const warn = $('[data-out="mtCodeWarn"]'); warn.hidden = !noCode.length;
+  if (noCode.length) warn.textContent = `Add an account code for ${noCode.map(a => a.desc || 'each line').join(', ')}; the Xero journal needs one.`;
+  out('mtPriorNotes', esc(M.prior.notes || ''));
+  $('#mtPriorNotesWrap').hidden = !M.prior.notes;
+}
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (el.dataset && el.dataset.mtq != null) {
+    const q = meetingQuestions()[+el.dataset.mtq];
+    S.meeting.answers[q] = { ...(S.meeting.answers[q] || {}), [el.dataset.f]: el.value };
+    save();
+  }
+});
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.dataset && el.dataset.mtq != null && el.tagName === 'SELECT') { const q = meetingQuestions()[+el.dataset.mtq]; S.meeting.answers[q] = { ...(S.meeting.answers[q] || {}), a: el.value }; save(); }
+  if (el.dataset && el.dataset.received) { S.meeting.received[el.dataset.received] = el.checked; renderReceived(); save(); }
+});
+$('#mtAddAdj').onclick = () => {
+  S.meeting.adj.push({ date: '', desc: '', key: 'sundry', code: '', type: 'paid', amount: '', biz: '100' });
+  renderLists(); refresh(); const el = $(`#mta-w-${S.meeting.adj.length - 1}`); if (el) el.focus();
+};
+const mileageAmount = miles => r2(Math.min(miles, 10000) * 0.45 + Math.max(0, miles - 10000) * 0.25);
+$('#mt-miles').addEventListener('input', e => {
+  const m = num(e.target.value);
+  out('mtMilesHint', m ? `${m.toLocaleString('en-GB')} miles = ${fmt(mileageAmount(m))}` : '45p a mile for the first 10,000, then 25p');
+});
+$('#mtAddMiles').onclick = () => {
+  const m = num($('#mt-miles').value);
+  if (!m) { toast('Enter the business miles first.'); return; }
+  const rate = m > 10000 ? `10,000 @ 45p + ${(m - 10000).toLocaleString('en-GB')} @ 25p` : `${m.toLocaleString('en-GB')} @ 45p`;
+  S.meeting.adj.push({ date: S.client.end || '', desc: `Business mileage, ${rate}`, key: 'motor', code: '', type: 'paid', amount: String(mileageAmount(m)), biz: '100' });
+  $('#mt-miles').value = '';
+  renderLists(); refresh(); toast(`Added mileage of ${fmt(mileageAmount(m))}.`);
 };
 
 // ── Rates editor ───────────────────────────────────────────────────────────
@@ -2471,6 +2653,20 @@ function importWorkingPapers(name, wb) {
     if (parts.length) fresh.client.address = parts.join(', ');
   }
 
+  // Post-meeting checklist: the questions and last year's answers.
+  {
+    const top = chk.find('B', /post-meeting checklist/i);
+    if (top) {
+      const qs = [], ans = {};
+      for (let r = top + 1; r <= chk.last; r++) {
+        const q = chk.v('C' + r); if (q == null || !String(q).trim()) continue;
+        const label = String(q).trim().replace(/^-\s*/, '- ');
+        qs.push(label); const a = chk.v('D' + r); if (a != null && String(a).trim()) ans[label] = String(a).trim();
+      }
+      if (qs.length) { fresh.meeting.questions = qs; fresh.meeting.prior.answers = ans; }
+    }
+  }
+
   // Profit comparatives from the TB.
   if (tb.last > 0) {
     const pp = fresh.profit.prior;
@@ -2556,6 +2752,8 @@ function rollForward(last) {
   n.accounts.priorSource = `${last.client.taxYear} workings`;
   n.accounts.map = { ...(last.accounts && last.accounts.map) };
   n.profit.source = last.profit.source;
+  n.meeting.questions = meetingQuestions(last);
+  n.meeting.prior = { answers: Object.fromEntries(Object.entries(last.meeting.answers || {}).filter(([, v]) => v && v.a).map(([q, v]) => [q, v.a + (v.note ? ` (${v.note})` : '')])), notes: last.meeting.notes || '' };
   n.profit.prior = { turnover: C.pf.turnover, otherIncome: C.pf.otherIncome, expenses: C.pf.expenses, uoh: C.uoh.figure, net: C.net, ca: C.ca.figure, adjustments: num(last.profit.adjustments), taxable: C.taxable };
   return n;
 }
@@ -2896,6 +3094,27 @@ function journalLines(C = compute()) {
     });
     close(`Capital allowances ${ty}`, lines);
   }
+  if (J.includeMeeting !== false && (S.meeting.adj || []).length) {
+    const lines = [];
+    // Say what kind of adjustment it is, unless the description already does.
+    const tag = (d, re, words) => (re.test(d) ? d : `${d} - ${words}`);
+    S.meeting.adj.forEach(a => {
+      const amt = r2(num(a.amount)); if (!amt) return;
+      const code = String(a.code || codeForKey(a.key) || '').trim() || '?';
+      const when = has(a.date) ? ` (${ukDate(a.date)})` : '';
+      if (a.type === 'private') {
+        const d = tag(`${a.desc || 'Private use'}${when}`, /private/i, 'private use');
+        lines.push({ code, desc: d, amount: -amt });
+        lines.push({ code: '980', desc: d, amount: amt });
+      } else if (a.type === 'income') {
+        lines.push({ code, desc: tag(`${a.desc || 'Income'}${when}`, /not banked|unbanked|cash/i, 'not banked'), amount: -amt });
+      } else {
+        const biz = has(a.biz) ? Math.min(Math.max(num(a.biz), 0), 100) : 100;
+        lines.push({ code, desc: `${tag(`${a.desc || 'Expense'}${when}`, /personal|paid by|mileage/i, 'paid personally')}${biz < 100 ? ` @ ${biz}% business use` : ''}`, amount: r2(amt * biz / 100) });
+      }
+    });
+    close(`Meeting adjustments ${ty}`, lines);
+  }
   return { date, journals, taxRate: J.taxRate || 'No VAT' };
 }
 function journalFileName() { return exportFileName().replace('_YE_', '_Xero_Journals_').replace(/\.xlsx$/, '.csv'); }
@@ -2985,6 +3204,17 @@ $('#exportBtn').onclick = () => {
   XLSX.utils.book_append_sheet(wb, sheetFrom(caSheet, [44, 13, 13, 13, 13, 15, 13, 11, 16]), 'CA');
   XLSX.utils.book_append_sheet(wb, sheetFrom(taxSheet, [34, 34, 12, 14, 13, 13, 50]), 'Tax');
   XLSX.utils.book_append_sheet(wb, sheetFrom(retSheet, [8, 6, 62, 16, 16]), 'Tax return');
+  { const M = S.meeting, eff = meetingLineEffects();
+    const ms = [...head, ['YEAR END MEETING'], ['Date', M.date ? ukDate(M.date) : ''], ['How', M.how || ''], ['Who attended', M.attendees || ''], ['Notes', M.notes || ''], [],
+      ['ADJUSTMENTS AGREED', 'Goes in', 'Account', 'Type', 'Amount', 'Business %', 'Effect on profit']];
+    M.adj.forEach((a, i) => ms.push([`${has(a.date) ? ukDate(a.date) + ' ' : ''}${a.desc || ''}`, (PL_LINES.find(l => l.key === a.key) || {}).label || '', a.code || codeForKey(a.key) || '',
+      MEET_TYPES.find(t => t[0] === a.type)[1], num(a.amount), a.type === 'paid' ? { t: 'n', v: num(has(a.biz) ? a.biz : 100) / 100, z: '0%' } : '', eff[i]]));
+    ms.push([], ['CHECKLIST', 'Last year', 'This year', 'Note']);
+    meetingQuestions().forEach(q => { const ans = M.answers[q] || {}; ms.push([q, M.prior.answers[q] || '', ans.a || '', ans.note || '']); });
+    const recd = receivedItems();
+    ms.push([], [`INFORMATION RECEIVED (${recd.filter(r => M.received[r.key]).length} of ${recd.length})`]);
+    recd.forEach(r => ms.push([r.label, M.received[r.key] ? 'Received' : 'Outstanding']));
+    XLSX.utils.book_append_sheet(wb, sheetFrom(ms, [48, 26, 10, 18, 12, 11, 14]), 'Meeting'); }
   // The full workings, so the file can be dropped back in. Cells hold at most 32,767 characters.
   const json = JSON.stringify({ ...S, imp: { ...S.imp, log: [] }, rates: hasRates(S.client.taxYear) ? { [S.client.taxYear]: ratesFor(S.client.taxYear) } : {} });
   const chunks = []; for (let i = 0; i < json.length; i += 30000) chunks.push([json.slice(i, i + 30000)]);
