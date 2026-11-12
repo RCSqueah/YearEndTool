@@ -167,12 +167,12 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     </div>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="client" aria-selected="true">Client &amp; import</button>
-      <button role="tab" data-tab="email">Client email</button>
       <button role="tab" data-tab="uoh">Use of Home</button>
       <button role="tab" data-tab="ca">Capital allowances</button>
       <button role="tab" data-tab="accounts">Accounts</button>
       <button role="tab" data-tab="tax">Tax</button>
       <button role="tab" data-tab="return">Tax return</button>
+      <button role="tab" data-tab="email">Client email</button>
       <button role="tab" data-tab="export">Export</button>
     </nav>
   </div>
@@ -417,7 +417,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     <label class="check" id="plToolWrap"><input type="checkbox" id="pl-tool"> <span data-out="plToolLabel"></span></label>
     <div class="note info" data-out="plCheck" hidden></div>
     <div class="table-wrap"><table class="calc"><thead><tr><th></th><th class="n">Imported</th><th class="n">Adjustment</th><th class="n" data-out="plYearNow"></th><th class="n" data-out="plYearPrior"></th></tr></thead><tbody id="plTable"></tbody></table></div>
-    <div class="row-actions"><button class="btn" type="button" id="plToTax">Use this net profit on the Tax tab</button><span class="muted small" data-out="plTaxNote"></span></div>
+    <p class="muted small" data-out="plTaxNote"></p>
   </section>
 
   <section class="panel" id="plXeroPanel">
@@ -457,16 +457,22 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
 <div data-pane="tax" hidden>
   <div class="stack">
   <section class="panel">
-    <div class="panel-head"><div><h2>Self-employment</h2><p class="muted small">SA103. Expenses here exclude Use of Home and capital allowances, which come from their own tabs.</p></div></div>
+    <div class="panel-head">
+      <div><h2>Self-employment</h2><p class="muted small" data-out="pSrcNote"></p></div>
+      <div class="seg" role="group" aria-label="Figures from">
+        <button type="button" data-profitsrc="accounts">From the Accounts tab</button>
+        <button type="button" data-profitsrc="manual">Enter here</button>
+      </div>
+    </div>
     <div class="table-wrap">
       <table class="calc">
         <thead><tr><th></th><th class="n">This year £</th><th class="n">Last year £</th></tr></thead>
         <tbody>
-          <tr><td>Turnover</td><td class="n"><input class="num" id="p-turnover" data-bind="profit.turnover" inputmode="decimal"></td><td class="n" data-out="ppTurnover"></td></tr>
-          <tr><td>Any other business income</td><td class="n"><input class="num" id="p-other" data-bind="profit.otherIncome" inputmode="decimal"></td><td class="n" data-out="ppOther"></td></tr>
-          <tr><td>Allowable expenses, excluding Use of Home</td><td class="n"><input class="num" id="p-exp" data-bind="profit.expenses" inputmode="decimal"></td><td class="n" data-out="ppExpenses"></td></tr>
+          <tr><td>Turnover</td><td class="n"><input class="num" id="p-turnover" data-bind="profit.turnover" inputmode="decimal" data-src="manual"><span data-src="accounts" data-out="pAccTurnover"></span></td><td class="n" data-out="ppTurnover"></td></tr>
+          <tr><td>Any other business income</td><td class="n"><input class="num" id="p-other" data-bind="profit.otherIncome" inputmode="decimal" data-src="manual"><span data-src="accounts" data-out="pAccOther"></span></td><td class="n" data-out="ppOther"></td></tr>
+          <tr><td>Allowable expenses, excluding Use of Home and capital allowances</td><td class="n"><input class="num" id="p-exp" data-bind="profit.expenses" inputmode="decimal" data-src="manual"><span data-src="accounts" data-out="pAccExpenses"></span></td><td class="n" data-out="ppExpenses"></td></tr>
           <tr><td>Use of Home</td><td class="n" data-out="pUoh"></td><td class="n" data-out="ppUoh"></td></tr>
-          <tr><td>Or net profit per the accounts, after Use of Home<div class="small muted">Fill in to use this figure instead of the lines above</div></td><td class="n"><input class="num" id="p-netov" data-bind="profit.netOverride" inputmode="decimal"></td><td class="n"></td></tr>
+          <tr data-src="manual"><td>Or net profit per the accounts, after Use of Home<div class="small muted">Fill in to use this figure instead of the lines above</div></td><td class="n"><input class="num" id="p-netov" data-bind="profit.netOverride" inputmode="decimal"></td><td class="n"></td></tr>
           <tr class="total"><td>Net profit</td><td class="n" data-out="pNet"></td><td class="n" data-out="ppNet"></td></tr>
           <tr><td>Less: capital allowances</td><td class="n" data-out="pCa"></td><td class="n" data-out="ppCa"></td></tr>
           <tr><td>Tax adjustments (+ add back, − deduct)</td><td class="n"><input class="num" id="p-adj" data-bind="profit.adjustments" inputmode="decimal"></td><td class="n" data-out="ppAdj"></td></tr>
@@ -636,7 +642,7 @@ function blankState() {
     v: 2,
     client: { name: '', taxYear: '2025/26', start: '2025-04-06', end: '2026-04-05', basis: 'Cash basis', address: '' },
     imp: { uohCode: '300', inPeriodOnly: true, log: [], chart: [] },
-    profit: { turnover: '', otherIncome: '', expenses: '', netOverride: '', adjustments: '', prior: {} },
+    profit: { source: null, turnover: '', otherIncome: '', expenses: '', netOverride: '', adjustments: '', prior: {} },
     journal: { uohCode: '300', caCode: '315', clearCode: '990', date: '', taxRate: 'No VAT', includeUoh: true, includeCa: true },
     uoh: {
       method: 'actual', lines: [], totalRooms: '', workRooms: '', timeMode: 'hours', hours: '', dayHours: '7.5', days: '', timePct: '',
@@ -929,16 +935,33 @@ function calcTax(st = S, trading) {
   };
 }
 
-function profitFigures(st, uohFigure, caFigure) {
+// The Tax tab takes the Accounts tab's figures once it has any, unless set otherwise.
+function profitFromAccounts(st) {
+  const src = st.profit.source;
+  if (src === 'accounts' || src === 'manual') return src === 'accounts';
+  const A = st.accounts || {};
+  return (A.xero || []).length > 0 || Object.values(A.adj || {}).some(v => num(v));
+}
+function profitFigures(st, uoh, ca) {
   const p = st.profit;
-  const net = has(p.netOverride) ? r2(num(p.netOverride)) : r2(num(p.turnover) + num(p.otherIncome) - num(p.expenses) - uohFigure);
-  return { net, taxable: r2(net - caFigure + num(p.adjustments)) };
+  if (profitFromAccounts(st)) {
+    // The accounts' costs include Use of Home and the capital allowances; take those
+    // out, as this tab shows them on their own lines.
+    const F = plFigures(st, { uoh, ca });
+    const caInAccounts = F.addTool ? ca.figure : Math.min(ca.figure, Math.max(0, F.rows.capex.value));
+    const turnover = r2(F.exact.sales), expenses = r2(F.exact.cos + F.exact.exp - F.rows.uoh.value - caInAccounts);
+    const net = r2(turnover - expenses - uoh.figure);
+    return { fromAccounts: true, turnover, otherIncome: 0, expenses, net, taxable: r2(net - ca.figure + num(p.adjustments)) };
+  }
+  const turnover = num(p.turnover), otherIncome = num(p.otherIncome), expenses = num(p.expenses);
+  const net = has(p.netOverride) ? r2(num(p.netOverride)) : r2(turnover + otherIncome - expenses - uoh.figure);
+  return { fromAccounts: false, turnover, otherIncome, expenses, net, taxable: r2(net - ca.figure + num(p.adjustments)) };
 }
 function compute(st = S) {
   const uoh = calcUoh(st), ca = calcCa(st);
-  const pf = profitFigures(st, uoh.figure, ca.figure);
+  const pf = profitFigures(st, uoh, ca);
   const tax = calcTax(st, pf.taxable);
-  return { uoh, ca, net: pf.net, taxable: pf.taxable, tax };
+  return { uoh, ca, pf, net: pf.net, taxable: pf.taxable, tax };
 }
 
 // ── Tax return rows ────────────────────────────────────────────────────────
@@ -950,13 +973,13 @@ function returnRows(st = S, C = compute(st)) {
   const any = (...v) => v.some(x => x != null && x !== '' && x !== 0);
   const ppNet = PP.net != null ? PP.net : null;
 
-  const turnover = num(st.profit.turnover);
+  const turnover = C.pf.turnover;
   group(`Self-employment: ${turnover > 90000 ? 'SA103F (full)' : 'SA103S (short)'}`);
   add('SA103', '', 'Date the books are made up to', ukDate(st.client.end));
   add('SA103', '', 'Cash basis used', st.client.basis === 'Cash basis' ? 'Yes' : 'No');
   add('SA103', '', 'Turnover', turnover, PP.turnover);
-  add('SA103', '', 'Any other business income', num(st.profit.otherIncome), PP.otherIncome);
-  const totalExp = has(st.profit.netOverride) ? (turnover ? r2(turnover + num(st.profit.otherIncome) - C.net) : '') : r2(num(st.profit.expenses) + C.uoh.figure);
+  add('SA103', '', 'Any other business income', C.pf.otherIncome, PP.otherIncome);
+  const totalExp = !C.pf.fromAccounts && has(st.profit.netOverride) ? (turnover ? r2(turnover + C.pf.otherIncome - C.net) : '') : r2(C.pf.expenses + C.uoh.figure);
   add('SA103', '', 'Total allowable expenses (including Use of Home)', totalExp, PP.expenses != null ? r2(PP.expenses + (PP.uoh || 0)) : null);
   add('SA103', '', C.net < 0 ? 'Net loss' : 'Net profit', C.net, ppNet);
   if (sp.aia) add('SA103', '', 'Annual Investment Allowance', sp.aia);
@@ -1180,6 +1203,7 @@ document.addEventListener('click', e => {
   if (t.dataset.restore != null) restoreItem(+t.dataset.restore);
   if (t.dataset.method) { S.uoh.method = t.dataset.method; refresh(); }
   if (t.dataset.timemode) { S.uoh.timeMode = t.dataset.timemode; refresh(); }
+  if (t.dataset.profitsrc) { S.profit.source = t.dataset.profitsrc; refresh(); }
   if (t.dataset.tab) showTab(t.dataset.tab);
   if (t.dataset.addItem) {
     S.tax.items[t.dataset.addItem].push(newItem(t.dataset.addItem));
@@ -1297,6 +1321,12 @@ function refresh() {
 
   // Profit
   const pr = v => v != null ? fmt0(v) : '–';
+  const fromAcc = C.pf.fromAccounts;
+  $$('[data-profitsrc]').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.profitsrc === 'accounts') === fromAcc)));
+  $$('[data-pane="tax"] [data-src]').forEach(el => { el.hidden = (el.dataset.src === 'accounts') !== fromAcc; });
+  out('pSrcNote', fromAcc ? 'SA103. Turnover and expenses come from the Accounts tab. Use of Home and capital allowances are shown on their own lines.'
+    : 'SA103. Expenses here exclude Use of Home and capital allowances, which come from their own tabs.');
+  out('pAccTurnover', fmt(C.pf.turnover)); out('pAccOther', fmt(C.pf.otherIncome)); out('pAccExpenses', fmt(C.pf.expenses));
   out('ppTurnover', pr(PP.turnover)); out('ppOther', pr(PP.otherIncome)); out('ppExpenses', pr(PP.expenses));
   out('pUoh', fmt(uoh.figure)); out('ppUoh', pr(PP.uoh));
   out('pNet', fmt(C.net)); out('ppNet', pr(PP.net));
@@ -1736,7 +1766,7 @@ function renderAccounts(C) {
   const chk = $('[data-out="plCheck"]');
   chk.hidden = A.xeroNet == null;
   if (A.xeroNet != null) chk.innerHTML = `Xero's net profit is ${fmt(A.xeroNet)}. ${F.addTool ? `With this tool's Use of Home and capital allowances, it's ${fmt(F.exact.net)}.` : `The accounts above show ${fmt(F.exact.net)}.`}`;
-  out('plTaxNote', `Sets the Tax tab's net profit to ${fmt(r2(F.exact.net + C.ca.figure))}: this net profit with the capital allowances added back, since the Tax tab deducts them itself.`);
+  out('plTaxNote', C.pf.fromAccounts ? "The Tax tab's self-employment figures come from here." : 'The Tax tab is set to its own figures. Choose "From the Accounts tab" there to use these.');
   // Xero accounts and where each goes
   $('#plXeroPanel').hidden = !(A.xero || []).length;
   out('plXeroSource', A.xeroFile ? `From ${esc(A.xeroFile)}. Change "Goes in" for any account; it's remembered for this client.` : '');
@@ -1751,13 +1781,6 @@ document.addEventListener('change', e => {
   if (t.id === 'pl-tool') { S.accounts.addTool = t.checked; refresh(); }
   if (t.dataset && t.dataset.plmap) { S.accounts.map = { ...(S.accounts.map || {}), [t.dataset.plmap]: t.value }; refresh(); }
 });
-$('#plToTax').onclick = () => {
-  const C = compute(), F = plFigures(S, C);
-  S.profit.netOverride = String(r2(F.exact.net + C.ca.figure));
-  S.profit.turnover = String(r2(F.exact.sales));
-  renderLists(); refresh();
-  toast(`Tax tab net profit set to ${fmt(r2(F.exact.net + C.ca.figure))}.`);
-};
 
 // Xero's Profit and Loss report: account rows under section headings.
 function isXeroPL(rows) {
@@ -2364,7 +2387,8 @@ function rollForward(last) {
   n.accounts.prior = Object.fromEntries(PL_LINES.map(l => [l.key, lastPl.rows[l.key].shown]));
   n.accounts.priorSource = `${last.client.taxYear} workings`;
   n.accounts.map = { ...(last.accounts && last.accounts.map) };
-  n.profit.prior = { turnover: num(last.profit.turnover), otherIncome: num(last.profit.otherIncome), expenses: num(last.profit.expenses), uoh: C.uoh.figure, net: C.net, ca: C.ca.figure, adjustments: num(last.profit.adjustments), taxable: C.taxable };
+  n.profit.source = last.profit.source;
+  n.profit.prior = { turnover: C.pf.turnover, otherIncome: C.pf.otherIncome, expenses: C.pf.expenses, uoh: C.uoh.figure, net: C.net, ca: C.ca.figure, adjustments: num(last.profit.adjustments), taxable: C.taxable };
   return n;
 }
 
@@ -2530,11 +2554,11 @@ function summarySheet(C, head) {
   const slKey = { 'Plan 1': 'slPlan1', 'Plan 2': 'slPlan2', 'Plan 4': 'slPlan4', 'Plan 5': 'slPlan5', 'Postgraduate': 'slPG' }[S.tax.slPlan];
 
   sec('PROFIT');
-  cell('turnover', 'Turnover', num(S.profit.turnover), PP.turnover);
-  cell('otherInc', 'Any other business income', num(S.profit.otherIncome), PP.otherIncome);
-  cell('expenses', 'Allowable expenses, excluding Use of Home', num(S.profit.expenses), PP.expenses);
+  cell('turnover', 'Turnover', C.pf.turnover, PP.turnover);
+  cell('otherInc', 'Any other business income', C.pf.otherIncome, PP.otherIncome);
+  cell('expenses', 'Allowable expenses, excluding Use of Home and capital allowances', C.pf.expenses, PP.expenses);
   cell('uoh', 'Use of Home', C.uoh.figure, PP.uoh, 'From the Use of Home sheet');
-  cell('net', 'Net profit per accounts', has(S.profit.netOverride) ? num(S.profit.netOverride) : { f: '{turnover}+{otherInc}-{expenses}-{uoh}' }, PP.net,
+  cell('net', 'Net profit per accounts', !C.pf.fromAccounts && has(S.profit.netOverride) ? num(S.profit.netOverride) : { f: '{turnover}+{otherInc}-{expenses}-{uoh}' }, PP.net,
     'Type the trading profit from the accounts here to replace the formula; the tax below updates');
   cell('ca', 'Capital allowances', C.ca.figure, PP.ca, 'From the CA sheet');
   cell('adj', 'Tax adjustments (+ add back, - deduct)', num(S.profit.adjustments), PP.adjustments);
