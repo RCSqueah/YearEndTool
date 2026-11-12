@@ -635,7 +635,7 @@ function blankState() {
   return {
     v: 2,
     client: { name: '', taxYear: '2025/26', start: '2025-04-06', end: '2026-04-05', basis: 'Cash basis', address: '' },
-    imp: { uohCode: '', inPeriodOnly: true, log: [], chart: [] },
+    imp: { uohCode: '300', inPeriodOnly: true, log: [], chart: [] },
     profit: { turnover: '', otherIncome: '', expenses: '', netOverride: '', adjustments: '', prior: {} },
     journal: { uohCode: '300', caCode: '315', clearCode: '990', date: '', taxRate: 'No VAT', includeUoh: true, includeCa: true },
     uoh: {
@@ -683,6 +683,7 @@ function migrate(data) {
   if (has(st.profit.before) && !has(st.profit.turnover)) st.profit.turnover = st.profit.before;
   delete st.profit.before;
   if (!has(st.uoh.dayHours)) st.uoh.dayHours = '7.5';
+  if (!has(st.imp.uohCode)) st.imp.uohCode = '300';
   if (!st.uoh.timeMode) st.uoh.timeMode = has(st.uoh.hours) ? 'hours' : has(st.uoh.timePct) ? 'pct' : 'hours';
   st.ca.pools.forEach(pl => { if (!pl.kind) pl.kind = 'car'; });
   st.v = 2;
