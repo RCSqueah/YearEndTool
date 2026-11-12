@@ -166,8 +166,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
       <div class="fig"><small>Due 31 January</small><b data-out="sumJan">£0</b><div class="prior" data-out="sumJanNote"></div></div>
     </div>
     <nav class="tabs" role="tablist">
-      <button role="tab" data-tab="client" aria-selected="true">Client &amp; import</button>
-      <button role="tab" data-tab="docs">Documents</button>
+      <button role="tab" data-tab="client" aria-selected="true">Client &amp; import <span class="chip warn" data-out="inboxCount"></span></button>
       <button role="tab" data-tab="uoh">Use of Home</button>
       <button role="tab" data-tab="ca">Capital allowances</button>
       <button role="tab" data-tab="accounts">Accounts</button>
@@ -223,12 +222,18 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
           <li><b>Xero Profit and Loss export</b> (.xlsx or .csv). Fills this year's Profit and Loss on the Accounts tab.</li>
           <li><b>Extraction Tool backup</b> (.json). Looks up this client's Use of Home account code.</li>
         </ul>
+        <div style="display:grid;gap:4px;margin-top:10px;justify-items:start;">
+          <a class="btn" id="etLink" href="../ExtractionTool/" target="_blank" rel="noopener">Open the Extraction Tool ↗</a>
+          <span class="muted small">Or read and code the client's documents there and click <b>Send to Year End Tool</b>: the lines appear below to add, with no file to save.</span>
+        </div>
       </div>
     </div>
     <div class="fields">
       <label class="field"><span>Use of Home account code</span><input id="f-uohcode" data-bind="imp.uohCode" placeholder="e.g. 300"><span class="hint">Used for Bank and Bills CSVs. Found automatically from a backup or Xero export.</span></label>
       <label class="check"><input type="checkbox" id="f-inperiod" data-bind="imp.inPeriodOnly"> Only take lines dated inside the period</label>
     </div>
+    <div class="note info" id="docsInbox" hidden></div>
+    <div id="docsBatches" style="display:grid;gap:6px;"></div>
     <ul class="log" id="log"></ul>
   </section>
 
@@ -323,21 +328,6 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
   <section class="panel">
     <div class="panel-head"><div><h2>Information received</h2><p class="muted small">What the information request asked for. Tick what the client has given you.</p></div><span class="chip" data-out="mtReceived"></span></div>
     <div class="sec-list" id="mtReceivedList"></div>
-  </section>
-  </div>
-</div>
-
-<!-- ───────────── DOCUMENTS (the Extraction Tool) ───────────── -->
-<div data-pane="docs" hidden>
-  <div class="stack">
-  <section class="panel">
-    <div class="panel-head">
-      <div><h2>Client documents</h2><p class="muted small">The Extraction Tool, inside this page. Drop in the year's bank statements, receipts and emails, check the coding, then click <b>Send to Year End Tool</b>. The lines fill the Use of Home tab and the Accounts tab's Profit and Loss, as a Bank CSV would.</p></div>
-      <a class="btn" id="docsOpenNew" href="../ExtractionTool/" target="_blank" rel="noopener">Open in a new tab ↗</a>
-    </div>
-    <div class="note info" id="docsInbox" hidden></div>
-    <div id="docsBatches" style="display:grid;gap:6px;"></div>
-    <iframe id="docsFrame" title="Extraction Tool" style="width:100%;height:1100px;border:1px solid var(--rule);border-radius:4px;background:#fff;"></iframe>
   </section>
   </div>
 </div>
@@ -1305,7 +1295,6 @@ function showTab(name) {
   try { sessionStorage.setItem('yearEnd:tab', name); } catch (_) {}
   if (name === 'email') renderEmail();
   if (name === 'meeting') renderReceived();
-  if (name === 'docs') { openDocuments(); renderBatches(); }
 }
 
 function calcRow(label, val, cls = '', prior) {
@@ -1451,6 +1440,7 @@ function refresh() {
 
   renderAccounts(C);
   refreshMeeting();
+  renderExtraction();
   out('exportName', esc(exportFileName()));
   const J = journalLines(C);
   $('#journalTable').innerHTML = J.journals.map(j => `<tr class="group"><td colspan="5">${esc(j.narration)}</td></tr>` +
@@ -2343,19 +2333,19 @@ $('#mtAddMiles').onclick = () => {
   renderLists(); refresh(); toast(`Added mileage of ${fmt(mileageAmount(m))}.`);
 };
 
-// ── Documents: the Extraction Tool ─────────────────────────────────────────
-// Both tools are on the same site, so the Extraction Tool runs inside this
-// page with its own key, clients and coding rules. Its "Send to Year End
-// Tool" button posts the coded lines here as Bank and Bills CSVs; opened on
-// its own, it leaves them in this browser's shared storage instead.
+// ── The Extraction Tool ────────────────────────────────────────────────────
+// Both tools are on the same site and share this browser's storage. The
+// Extraction Tool opens in a new tab on the same client; its "Send to Year
+// End Tool" button leaves the coded lines in shared storage, and they show
+// here (straight away, through the storage event) to add to the workings.
 const EXTRACTION_URL = '../ExtractionTool/';
 const INBOX_KEY = 'yearEnd:inbox';
-function openDocuments() {
-  const fr = $('#docsFrame');
-  const url = `${EXTRACTION_URL}?client=${encodeURIComponent(S.client.name || '')}&from=yearend`;
-  $('#docsOpenNew').href = url;
-  if (fr.dataset.client !== (S.client.name || '') || !fr.src) { fr.src = url; fr.dataset.client = S.client.name || ''; }
+function renderExtraction() {
+  const name = S.client.name || '';
+  $('#etLink').href = `${EXTRACTION_URL}${name ? `?client=${encodeURIComponent(name)}` : ''}`;
+  $('#etLink').textContent = `Open the Extraction Tool${name ? ` for ${name}` : ''} ↗`;
   renderInbox();
+  renderBatches();
 }
 function readInbox() { try { return JSON.parse(localStorage.getItem(INBOX_KEY) || '[]') || []; } catch (_) { return []; } }
 function writeInbox(list) { try { localStorage.setItem(INBOX_KEY, JSON.stringify(list)); } catch (_) {} }
@@ -2368,7 +2358,7 @@ function receiveFromExtraction(msg) {
   files.forEach(f => importCsv(f.name, f.csv));
   const lines = files.reduce((a, f) => a + (f.count || 0), 0);
   logMsg('ok', `Extraction Tool: ${lines} line${lines !== 1 ? 's' : ''} received for ${msg.client || 'this client'}${msg.batch ? ` (${msg.batch})` : ''}. Sending the same job again replaces them.`);
-  renderLists(); refresh(); renderBatches();
+  renderLists(); refresh();
   toast(`Received ${lines} line${lines !== 1 ? 's' : ''} from the Extraction Tool.`);
 }
 window.addEventListener('message', e => {
@@ -2403,7 +2393,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('[data-batch-remove]');
   if (!t) return;
   const bt = importedBatches()[+t.dataset.batchRemove];
-  if (bt) { removeBatch(bt.name); renderBatches(); }
+  if (bt) removeBatch(bt.name);
 });
 
 // Lines sent while the Extraction Tool was open on its own.
@@ -2411,6 +2401,7 @@ function renderInbox() {
   const box = $('#docsInbox'), list = readInbox();
   const mine = list.map((m, i) => ({ m, i })).filter(({ m }) => !S.client.name || sameClient(m.client, S.client.name));
   box.hidden = !mine.length;
+  out('inboxCount', mine.length ? String(mine.length) : '');
   if (!mine.length) return;
   box.innerHTML = `<b>Waiting from the Extraction Tool</b>` + mine.map(({ m, i }) => {
     const n = (m.files || []).reduce((a, f) => a + (f.count || 0), 0);
@@ -2426,7 +2417,8 @@ document.addEventListener('click', e => {
   if (t.dataset.inboxTake != null && msg) receiveFromExtraction(msg);
   renderInbox();
 });
-window.addEventListener('focus', () => { if (!$('[data-pane="docs"]').hidden) renderInbox(); });
+window.addEventListener('focus', renderInbox);
+window.addEventListener('storage', e => { if (e.key === INBOX_KEY) { renderInbox(); toast('Lines from the Extraction Tool are waiting on the Client & import tab.'); } });
 
 // ── Rates editor ───────────────────────────────────────────────────────────
 function renderRates() {
