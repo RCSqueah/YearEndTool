@@ -209,6 +209,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
         <ul class="muted" style="margin:0;padding-left:18px;display:grid;gap:4px;">
           <li><b>Last year's working papers</b> (.xlsx with Expenses, Tax and CA sheets). Brings forward the Use of Home items and splits, the CA calculation and balances, and each Tax sheet line as a comparative.</li>
           <li><b>Last year's accounts PDF</b> (the Unaudited Financial Statements). Gives last year's Profit and Loss column and the client's address.</li>
+          <li><b>Last year's tax return</b> (the HMRC SA100 PDF). Gives last year's income, reliefs, student loan, Child Benefit, tax and payments on account.</li>
           <li><b>Last year's export from this tool</b> (.xlsx). Rolls everything forward. If it's the same tax year, it reopens it for editing.</li>
         </ul>
       </div>
@@ -620,7 +621,7 @@ const TAX_SECTIONS = [
     kinds: [['uk', 'Untaxed UK interest (box 2)'], ['foreign', 'Untaxed foreign interest (box 3)']],
     cols: [['desc', 'Bank or account'], ['kind', 'Goes in'], ['amount', 'Interest £', 1]] },
   { key: 'dividends', title: 'Dividends', form: 'SA100 page TR3', add: 'Add shareholding',
-    kinds: [['uk', 'UK companies (box 4)'], ['other', 'Other dividends (box 5)'], ['foreign', 'Foreign, up to £2,000 (box 6)']],
+    kinds: [['uk', 'UK companies (box 4)'], ['other', 'Other dividends (box 5)'], ['foreign', 'Foreign, up to £500 (box 6)']],
     cols: [['desc', 'Company or fund'], ['kind', 'Goes in'], ['amount', 'Dividends £', 1]] },
   { key: 'pensions', title: 'Pensions and benefits', form: 'SA100 page TR3', add: 'Add pension',
     kinds: [['state', 'State Pension (box 8)'], ['other', 'Other pensions (box 11)'], ['benefit', 'Other taxable benefits (box 16)']],
@@ -1012,7 +1013,7 @@ function returnRows(st = S, C = compute(st)) {
   group('Interest, dividends and other income: SA100 page TR3');
   const tr3 = [
     ['2', 'Untaxed UK interest', 'interest', 'amount', ['uk']], ['3', 'Untaxed foreign interest (up to £2,000)', 'interest', 'amount', ['foreign']],
-    ['4', 'Dividends from UK companies', 'dividends', 'amount', ['uk']], ['5', 'Other dividends', 'dividends', 'amount', ['other']], ['6', 'Foreign dividends (up to £2,000)', 'dividends', 'amount', ['foreign']],
+    ['4', 'Dividends from UK companies', 'dividends', 'amount', ['uk']], ['5', 'Other dividends', 'dividends', 'amount', ['other']], ['6', 'Foreign dividends (up to £500)', 'dividends', 'amount', ['foreign']],
     ['8', 'State Pension', 'pensions', 'amount', ['state']], ['11', 'Pensions (other than State Pension)', 'pensions', 'amount', ['other']], ['12', 'Tax taken off box 11', 'pensions', 'tax', ['other']],
     ['16', 'Total of any other taxable State Pensions and benefits', 'pensions', 'amount', ['benefit']],
     ['17', 'Other taxable income', 'other', 'amount'], ['19', 'Any tax taken off box 17', 'other', 'tax'],
@@ -1262,7 +1263,7 @@ function refresh() {
   out('sumProfit', fmt(C.taxable));
   out('sumProfitPrior', PP.taxable != null ? 'Last year ' + fmt0(PP.taxable) : '');
   out('sumTax', fmt0(tax.liability));
-  out('sumTaxPrior', 'Before tax deducted at source');
+  out('sumTaxPrior', S.tax.prior.liability != null ? 'Last year ' + fmt0(S.tax.prior.liability) : 'Before tax deducted at source');
   out('sumJan', fmt0(tax.janTotal));
   out('sumJanNote', `31 Jan ${tax.endYear + 1}, incl. 1st payment on account`);
 
@@ -1470,10 +1471,10 @@ function emailSections() {
   add('employment', 'Employment', '', { asks: it('employment').map((e, i) => ({ id: 'e' + i, label: e.desc || 'Employer', sub: e.prior != null ? `Last year ${fmtM(e.prior)}` : '',
     lines: [`- Your P60 from ${e.desc || 'your employer'}${ly(e.prior)}, and a P11D if you had benefits such as private medical cover or a company car.`] })) });
 
-  const listOf = (sec, generic) => it(sec).map((x, i) => { const n = itemName(x, generic) || 'Each account'; return { id: 'i' + i, label: n, sub: x.prior != null ? `Last year ${fmtM(x.prior)}` : 'New this year', line: `    • ${n}${ly(x.prior)}` }; });
+  const listOf = (sec, generic, each = 'Each account') => it(sec).map((x, i) => { const n = itemName(x, generic) || each; return { id: 'i' + i, label: n, sub: x.prior != null ? `Last year ${fmtM(x.prior)}` : 'New this year', line: `    • ${n}${ly(x.prior)}` }; });
   add('interest', 'Savings interest', '', { intro: '- The interest paid to you during the year by:', list: listOf('interest', /^(savings )?interest$/i),
     after: "  Your bank's yearly interest statement, or online banking, will show this. ISA interest isn't needed." });
-  add('dividends', 'Dividends', '', { intro: '- Dividends paid to you during the year by:', list: listOf('dividends', /^dividends?$/i),
+  add('dividends', 'Dividends', '', { intro: '- Dividends paid to you during the year by:', list: listOf('dividends', /^dividends?$/i, 'Each company or fund'),
     after: "  A dividend voucher, or your investment platform's yearly tax statement, will show this." });
 
   add('pensions', 'Pensions', '', { asks: it('pensions').map((x, i) => ({ id: 'p' + i, label: x.kind === 'state' ? 'State Pension' : (x.desc || 'Pension'), sub: x.prior != null ? `Last year ${fmtM(x.prior)}` : '',
@@ -1730,6 +1731,8 @@ function fillPriorFromAccounts(st) {
   const uoh = v('uoh'), capex = v('capex'), netPL = r2(sales - cos - exp);
   const PP = st.profit.prior, set = (k, val) => { if (PP[k] == null) { PP[k] = val; n++; } };
   let n = 0;
+  if (PP.expensesInclUoh && PP.uoh == null && uoh) { PP.expenses = r2(PP.expenses - uoh); PP.uoh = uoh; n++; }
+  delete PP.expensesInclUoh;
   set('turnover', sales); set('otherIncome', 0);
   set('expenses', r2(cos + exp - uoh - capex)); // the Tax tab shows Use of Home and capital allowances on their own lines
   set('uoh', uoh); set('ca', capex); set('net', r2(netPL + capex)); set('adjustments', 0); set('taxable', netPL);
@@ -1838,7 +1841,8 @@ function loadScript(src) {
     el.onload = () => res(); el.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(el);
   });
 }
-async function pdfLines(buf) {
+// Each page's text items with position, size and font.
+async function pdfPages(buf) {
   await loadScript('vendor/pdfjs-3.11.174/pdf.min.js');
   const lib = window.pdfjsLib;
   lib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs-3.11.174/pdf.worker.min.js';
@@ -1846,19 +1850,161 @@ async function pdfLines(buf) {
   const pages = [];
   for (let n = 1; n <= doc.numPages; n++) {
     const tc = await (await doc.getPage(n)).getTextContent();
-    const rows = new Map();
-    tc.items.forEach(it => {
-      if (!it.str || !it.str.trim()) return;
-      const y = Math.round(it.transform[5]);
-      const key = [...rows.keys()].find(k => Math.abs(k - y) <= 2) ?? y;
-      (rows.get(key) || rows.set(key, []).get(key)).push({ x: it.transform[4], s: it.str });
-    });
-    pages.push([...rows.entries()].sort((a, b) => b[0] - a[0]).map(([, its]) => its.sort((a, b) => a.x - b.x).map(i => i.s.trim()).join(' ').replace(/\s+/g, ' ').trim()));
+    pages.push(tc.items.filter(it => it.str && it.str.trim()).map(it => ({ s: it.str.trim(), x: it.transform[4], y: it.transform[5], h: it.height, font: it.fontName })));
   }
   return pages;
 }
-async function importAccountsPdf(name, buf) {
-  const pages = await pdfLines(buf);
+// The same pages as lines of text, top to bottom.
+function pageLines(items) {
+  const rows = new Map();
+  items.forEach(it => {
+    const y = Math.round(it.y);
+    const key = [...rows.keys()].find(k => Math.abs(k - y) <= 2) ?? y;
+    (rows.get(key) || rows.set(key, []).get(key)).push(it);
+  });
+  return [...rows.entries()].sort((a, b) => b[0] - a[0]).map(([, its]) => its.sort((a, b) => a.x - b.x).map(i => i.s).join(' ').replace(/\s+/g, ' ').trim());
+}
+// Last year's accounts PDF or tax return, told apart by their contents.
+async function importPdf(name, buf) {
+  const pages = await pdfPages(buf);
+  const lines = pages.map(pageLines);
+  if (lines.flat().some(l => /SA100\s+20\d\d/.test(l)) && lines.flat().some(l => /tax return/i.test(l))) return importTaxReturn(name, pages, lines);
+  return importAccountsPdf(name, lines);
+}
+
+// ── Last year's tax return (HMRC SA100 and supplementary pages) ───────────
+// Filled-in values sit just below their box number, in the left or right
+// column; each page's footer names its form and page (e.g. "SA103S 2025 Page SES 1").
+const RETURN_SECTIONS = [[/^student loan/i, 'sl'], [/high income child benefit/i, 'hicbc'], [/marriage allowance/i, 'ma']];
+function readReturnPages(pages) {
+  const out = [];
+  pages.forEach(items => {
+    // Leave out the page's barcode text, which can sit among the footer words.
+    const isCode = i => /^[A-Z0-9]{20,}$/.test(i.s);
+    const foot = items.filter(i => i.y < 25 && !isCode(i)).sort((a, b) => a.x - b.x).map(i => i.s).join(' ');
+    const m = foot.match(/(SA\d{3}[A-Z]?)\s+(20\d\d)\s+Page\s+([A-Z]+)\s*(\d+)/i);
+    if (!m) return;
+    const form = m[1].toUpperCase(), page = m[3].toUpperCase() + m[4];
+    const boxes = items.filter(i => /^\d{1,2}(\.\d)?$/.test(i.s) && i.h < 8);
+    const valueFonts = new Set(items.filter(i => /^-?[\d,]+\.\d\d$/.test(i.s) && i.h >= 8).map(i => i.font));
+    const heads = [];
+    items.forEach(i => { const sec = RETURN_SECTIONS.find(([re]) => re.test(i.s)); if (sec && i.h >= 9) heads.push({ y: i.y, sec: sec[1] }); });
+    const col = x => (x < 300 ? 0 : 1);
+    const values = {};
+    items.filter(i => i.y > 25 && i.h >= 8 && !isCode(i) && (valueFonts.has(i.font) || (i.s === 'X' && valueFonts.size))).forEach(v => {
+      const box = boxes.filter(b => col(b.x) === col(v.x) && b.y > v.y && b.y - v.y < 140).sort((a, b) => a.y - b.y)[0];
+      if (!box) return;
+      const head = heads.filter(h => h.y > v.y).sort((a, b) => a.y - b.y)[0];
+      const key = (head ? head.sec + ':' : '') + box.s;
+      values[key] = values[key] ? values[key] + ' ' + v.s : v.s;
+    });
+    out.push({ form, page, values });
+  });
+  return out;
+}
+
+function importTaxReturn(name, pages, lines) {
+  const all = lines.flat();
+  const yr = all.join(' ').match(/Tax year 6 April (\d{4}) to 5 April (\d{4})/i);
+  const retYear = yr ? `${yr[1]}/${yr[2].slice(2)}` : '';
+  const read = readReturnPages(pages);
+  const get = (form, page, key) => { const p = read.find(r => r.form === form && (!page || r.page === page) && r.values[key] != null); return p ? p.values[key] : null; };
+  const amt = (form, page, key) => { const t = get(form, page, key); return t == null ? null : (/^-?[\d,]+(\.\d+)?$/.test(t.replace(/\s/g, '')) ? num(t.replace(/\s/g, '')) : null); };
+  const done = [];
+
+  // No client yet: set one up for the year after this return.
+  if (!S.client.name && yr) {
+    // The first page has the UTR followed by the name, e.g. "4968995119 J VANDOROS".
+    const raw = ((lines[0] || []).map(l => l.match(/^\d{10}\s+([A-Za-z][A-Za-z .'-]+)$/)).find(Boolean) || [])[1] || '';
+    if (raw) S.client.name = raw.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    S.client.start = `${yr[2]}-04-06`; S.client.end = `${Number(yr[2]) + 1}-04-05`; S.client.taxYear = nextTaxYear(retYear);
+  }
+  if (retYear && S.client.taxYear !== nextTaxYear(retYear)) logMsg('warn', `${name} is the ${retYear} return, but these workings are for ${S.client.taxYear}. Its figures are shown as last year's anyway.`);
+
+  // Self-employment (short).
+  const PP = S.profit.prior;
+  if (read.some(r => r.form === 'SA103S')) {
+    const b = k => amt('SA103S', null, k);
+    const uoh = PP.uoh != null ? PP.uoh : (S.accounts.prior && S.accounts.prior.uoh) || 0;
+    const ca = r2((b('23') || 0) + (b('24') || 0) + (b('24.1') || 0) + (b('25') || 0) - (b('26') || 0));
+    if (b('9') != null) PP.turnover = b('9');
+    PP.otherIncome = b('10') || 0;
+    if (b('20') != null) PP.expenses = r2(b('20') - uoh);
+    // Without last year's Use of Home yet, box 20 still includes it; the accounts take it out later.
+    if (b('20') != null && !uoh) PP.expensesInclUoh = true; else delete PP.expensesInclUoh;
+    if (b('21') != null || b('22') != null) PP.net = b('21') != null ? b('21') : -b('22');
+    PP.ca = ca;
+    const taxable = b('28') != null ? b('28') : b('31');
+    if (taxable != null) { PP.taxable = taxable; if (PP.net != null) PP.adjustments = r2(taxable - (PP.net - ca)); }
+    if (S.ca.prior.total == null && ca) S.ca.prior.total = ca;
+    done.push('self-employment');
+  } else if (read.some(r => r.form === 'SA103F')) logMsg('warn', `${name}: the full self-employment pages (SA103F) aren't read yet; the rest of the return was.`);
+
+  // A line in a Tax tab section for last year's figure, unless one already has it.
+  const setPrior = (sec, kind, desc, prior, extra = {}) => {
+    if (!prior && !extra.priorTax) return;
+    const list = items(S, sec).filter(i => !kind || i.kind === kind);
+    if (list.some(i => i.prior != null)) return;
+    if (list.length === 1) Object.assign(list[0], { prior, ...extra });
+    else if (!list.length) S.tax.items[sec].push(newItem(sec, { desc, kind: kind || '', prior, ...extra }));
+    else { logMsg('warn', `${name}: last year's ${desc.toLowerCase()} was ${fmt(prior)} in total; add it to the right line on the Tax tab.`); return; }
+    done.push(desc.toLowerCase());
+  };
+  const tr = (page, key) => amt('SA100', page, key);
+  setPrior('interest', 'uk', 'Interest', r2((tr('TR3', '1') || 0) + (tr('TR3', '2') || 0)));
+  setPrior('interest', 'foreign', 'Foreign interest', tr('TR3', '3'));
+  setPrior('dividends', 'uk', 'Dividends', tr('TR3', '4'));
+  setPrior('dividends', 'other', 'Other dividends', tr('TR3', '5'));
+  setPrior('dividends', 'foreign', 'Foreign dividends', tr('TR3', '6'));
+  setPrior('pensions', 'state', 'State Pension', tr('TR3', '8'));
+  setPrior('pensions', 'other', 'Pension', tr('TR3', '11'), tr('TR3', '12') ? { priorTax: tr('TR3', '12') } : {});
+  setPrior('pensions', 'benefit', 'Taxable benefits', tr('TR3', '16'));
+  setPrior('other', '', get('SA100', 'TR3', '21') || 'Other income', tr('TR3', '17'), tr('TR3', '19') ? { priorTax: tr('TR3', '19') } : {});
+  const rasGross = tr('TR4', '1');
+  if (rasGross) setPrior('pensionNet', '', 'Pension', r2(rasGross / 1.25));
+  const ga5 = tr('TR4', '5') || 0, ga6 = tr('TR4', '6') || 0, ga7 = tr('TR4', '7') || 0;
+  setPrior('giftAid', 'year', 'Gift Aid', r2(ga5 - ga6 - ga7));
+  setPrior('giftAid', 'oneoff', 'Gift Aid, one-off', ga6);
+  setPrior('giftAid', 'back', 'Gift Aid, treated as the year before', ga7);
+  setPrior('giftAid', 'forward', 'Gift Aid, paid after 5 April', tr('TR4', '8'));
+  if (get('SA100', 'TR5', 'sl:1') === 'X' || tr('TR5', 'sl:2')) { S.tax.prior.slPlan = 'Yes'; if (S.tax.slPlan === 'None') S.tax.slPlan = 'Plan 1'; done.push('student loan'); logMsg('warn', `${name}: student loan repayments last year. The return doesn't say which plan, so check the plan on the Tax tab.`); }
+  if (tr('TR5', 'hicbc:1')) {
+    S.tax.cb = true; S.tax.prior.cb = `Yes, ${fmt(tr('TR5', 'hicbc:1'))}`;
+    const kids = tr('TR5', 'hicbc:2'); if (kids) S.tax.children = String(kids);
+    done.push('Child Benefit');
+  }
+
+  // Employment pages, one per job.
+  read.filter(r => r.form === 'SA102' && r.page === 'E1').forEach(r => {
+    const employer = (r.values['5'] || 'Employer').trim(), pay = r.values['1'] != null ? num(r.values['1']) : null;
+    const taxOff = r.values['2'] != null ? num(r.values['2']) : null;
+    const match = items(S, 'employment').find(i => i.desc.trim().toLowerCase() === employer.toLowerCase());
+    if (match) { if (match.prior == null) Object.assign(match, { prior: pay, priorTax: taxOff, ref: match.ref || r.values['4'] || '' }); }
+    else S.tax.items.employment.push(newItem('employment', { desc: employer, ref: r.values['4'] || '', prior: pay, priorTax: taxOff }));
+    done.push(`employment (${employer})`);
+  });
+
+  // UK property.
+  if (read.some(r => r.form === 'SA105')) {
+    const pb = k => amt('SA105', null, k);
+    const expenses = ['24', '25', '26', '27', '28', '29'].reduce((a, k) => a + (pb(k) || 0), 0);
+    if (pb('20') != null) setPrior('property', '', 'UK property', pb('20'), { priorExpenses: r2(expenses), priorFinance: pb('44') });
+  }
+
+  // Tax calculation: last year's tax, and the payments on account set for this year.
+  const total = amt('SA110', 'TC1', '1'), poa = amt('SA110', 'TC1', '11');
+  if (total != null) S.tax.prior.liability = total;
+  if (poa) {
+    if (!has(S.tax.poaPaid)) S.tax.poaPaid = String(r2(poa * 2));
+    logMsg('ok', `${name}: payments on account for ${nextTaxYear(retYear)} were ${fmt(poa)} each. Payments on account made is set to ${fmt(poa * 2)}; change it if they weren't paid.`);
+  } else if (total != null) {
+    logMsg('ok', `${name}: last year's tax was ${fmt(total)}, with no payments on account set for ${nextTaxYear(retYear)}.`);
+  }
+  logMsg('ok', `${name}: ${retYear} tax return read${done.length ? `: ${[...new Set(done)].join(', ')}` : ''}.`);
+  toast("Last year's tax return read.");
+}
+
+function importAccountsPdf(name, pages) {
   const all = pages.flat();
   const plPage = pages.find(p => p.some(l => /^profit and loss/i.test(l)) && p.some(l => /net profit/i.test(l)));
   if (!plPage) { logMsg('warn', `${name}: no Profit and Loss page found in this PDF.`); return; }
@@ -2091,7 +2237,7 @@ async function handleFiles(files) {
   for (const f of files.sort((a, b) => order(a) - order(b))) {
     try {
       if (/\.json$/i.test(f.name)) importBackup(f.name, JSON.parse(await f.text()));
-      else if (/\.pdf$/i.test(f.name)) await importAccountsPdf(f.name, await f.arrayBuffer());
+      else if (/\.pdf$/i.test(f.name)) await importPdf(f.name, await f.arrayBuffer());
       else if (/\.csv$/i.test(f.name)) importCsv(f.name, csvText(await f.arrayBuffer()));
       else {
         const wb = XLSX.read(await f.arrayBuffer());
