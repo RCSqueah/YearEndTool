@@ -15,6 +15,7 @@ It is a single web page with no server, hosted free on **GitHub Pages**, like th
     - the main pool balance;
     - last year's Tax sheet totals as comparatives, the student loan plan and Child Benefit status, and a regular Gift Aid amount;
     - last year's profit, Use of Home, CA and taxable profit from the TB.
+  - **Last year's tax return** (the HMRC SA100 PDF with its supplementary pages, as a "Copy only" print). Gives last year's figures for self-employment (SA103S), employments (SA102), interest, dividends, pensions, other income (TR3), pension contributions and Gift Aid (TR4), student loan and Child Benefit (TR5), UK property (SA105), and the tax calculation (SA110), including the payments on account set for this year. The full self-employment pages (SA103F) aren't read yet.
   - **Last year's export from this tool**. Rolls everything forward a year, with c/fwd values becoming b/fwd. If it's the same tax year, it reopens the workings for editing.
   - **Extraction Tool Bank Statement or Bills CSV**. Lines coded to the Use of Home account are grouped into Rent, Council tax, Water, Gas and electricity and so on, and matched to last year's items. Dropping the same file in twice replaces its figures rather than doubling them.
   - **Xero Account Transactions export**. Reads the Use of Home account by name, and a "1 of 3 rooms" adjustment journal for the work space split.
