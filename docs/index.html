@@ -155,8 +155,11 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
 <div class="strip">
   <div class="wrap">
     <header class="top">
-      <h1>Year End Workings <small id="hdrClient">No client loaded</small></h1>
-      <span class="muted small" id="hdrYear"></span>
+      <h1>Year End Workings</h1>
+      <div class="row-actions">
+        <select id="clientPick" aria-label="Client" style="width:auto;min-width:220px;max-width:100%;"></select>
+        <span class="muted small" id="hdrYear"></span>
+      </div>
     </header>
     <div class="figures" aria-live="polite">
       <div class="fig"><small>Use of Home</small><b data-out="sumUoh">£0</b><div class="prior" data-out="sumUohPrior"></div></div>
@@ -166,6 +169,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
       <div class="fig"><small>Due 31 January</small><b data-out="sumJan">£0</b><div class="prior" data-out="sumJanNote"></div></div>
     </div>
     <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="clients">Clients</button>
       <button role="tab" data-tab="client" aria-selected="true">Client &amp; import <span class="chip warn" data-out="inboxCount"></span></button>
       <button role="tab" data-tab="uoh">Use of Home</button>
       <button role="tab" data-tab="ca">Capital allowances</button>
@@ -183,6 +187,28 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
 <main>
 
 <!-- ───────────── CLIENT & IMPORT ───────────── -->
+<!-- ───────────── CLIENTS ───────────── -->
+<div data-pane="clients" hidden>
+  <div class="stack">
+  <section class="panel">
+    <div class="panel-head"><div><h2>Clients</h2><p class="muted small">Each client's workings for each tax year, saved in this browser. Click a name to open it.</p></div>
+      <button class="btn primary" type="button" id="newClientBtn">+ New client</button></div>
+    <div class="table-wrap"><table class="items">
+      <thead><tr><th>Client</th><th>Year</th><th>Requested</th><th>Received</th><th>Meeting</th><th>Sent</th><th>Approved</th><th>Filed</th><th>Next step</th><th class="n">Taxable profit</th><th class="n">Due 31 Jan</th><th></th></tr></thead>
+      <tbody id="clientsTable"></tbody>
+    </table></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h2>Backup</h2><p class="muted small">Clearing the browser's data deletes every client saved here. Back up now and then, or to move your clients to another computer or browser.</p></div></div>
+    <div class="row-actions">
+      <button class="btn" type="button" id="backupBtn">↓ Back up all clients</button>
+      <label class="btn" style="cursor:pointer;">↑ Restore from backup<input type="file" id="restoreIn" accept=".json"></label>
+      <span class="muted small" data-out="backupNote"></span>
+    </div>
+  </section>
+  </div>
+</div>
+
 <div data-pane="client">
   <div class="stack">
   <section class="panel">
@@ -197,6 +223,18 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     </div>
   </section>
 
+
+  <section class="panel">
+    <div class="panel-head"><div><h2>Progress</h2><p class="muted small">Some dates fill themselves in: copying the information request, ticking off everything received on the Meeting tab, and copying the accounts email.</p></div><span class="chip" data-out="nextStep"></span></div>
+    <div class="fields">
+      <label class="field"><span>Information requested</span><input type="date" id="pg-req" data-bind="progress.requested"></label>
+      <label class="field"><span>Information received</span><input type="date" id="pg-rec" data-bind="progress.received"><span class="hint" data-out="pgReceivedHint"></span></label>
+      <label class="field"><span>Meeting</span><input type="date" id="pg-meet" data-bind="meeting.date"></label>
+      <label class="field"><span>Accounts sent</span><input type="date" id="pg-sent" data-bind="progress.sent"></label>
+      <label class="field"><span>Approved by the client</span><input type="date" id="pg-appr" data-bind="progress.approved"></label>
+      <label class="field"><span>Return filed</span><input type="date" id="pg-filed" data-bind="progress.filed"></label>
+    </div>
+  </section>
 
   <section class="panel">
     <div class="panel-head"><h2>Bring in last year and this year's figures</h2></div>
@@ -238,7 +276,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
   </section>
 
   <section class="panel">
-    <div class="panel-head"><h2>Start again</h2></div>
+    <div class="panel-head"><h2>Remove</h2></div>
     <div class="row-actions" id="resetRow"></div>
   </section>
   </div>
@@ -691,10 +729,20 @@ const TAX_SECTIONS = [
     cols: [['desc', 'Charity'], ['kind', 'Goes in'], ['amount', 'Paid £', 1]] },
 ];
 const blankItems = () => Object.fromEntries(TAX_SECTIONS.map(s => [s.key, []]));
+// The tax year being prepared now: the one that ended most recently.
+function currentWorkYear() {
+  const d = new Date(), y = d.getFullYear();
+  const ended = d.getMonth() > 3 || (d.getMonth() === 3 && d.getDate() >= 6) ? y : y - 1;
+  return `${ended - 1}/${String(ended).slice(2)}`;
+}
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 function blankState() {
+  const ty = currentWorkYear(), end = Number(ty.slice(0, 4)) + 1;
   return {
     v: 2,
-    client: { name: '', taxYear: '2025/26', start: '2025-04-06', end: '2026-04-05', basis: 'Cash basis', address: '' },
+    id: newId(),
+    progress: { requested: '', received: '', sent: '', approved: '', filed: '' },
+    client: { name: '', taxYear: ty, start: `${end - 1}-04-06`, end: `${end}-04-05`, basis: 'Cash basis', address: '' },
     imp: { uohCode: '300', inPeriodOnly: true, log: [], chart: [] },
     profit: { source: null, turnover: '', otherIncome: '', expenses: '', netOverride: '', adjustments: '', prior: {} },
     journal: { uohCode: '300', caCode: '315', clearCode: '990', date: '', taxRate: 'No VAT', includeUoh: true, includeCa: true, includeMeeting: true },
@@ -714,17 +762,60 @@ function blankState() {
 }
 let S; // loaded at start-up, once every helper below exists
 
-function load() {
-  let raw = null;
-  try { raw = localStorage.getItem(STORE_KEY); } catch (_) {}
-  if (!raw) return blankState();
-  try { return migrate(JSON.parse(raw)); }
+// Each client's workings for a tax year are saved as their own record, with a
+// list of them (name, year, progress and key figures) for the Clients tab.
+const INDEX_KEY = 'yearEnd:clients', CURRENT_KEY = 'yearEnd:current', recordKey = id => 'yearEnd:client:' + id;
+const lsRead = k => { try { return localStorage.getItem(k); } catch (_) { return null; } };
+const lsWrite = (k, v) => { try { localStorage.setItem(k, v); return true; } catch (_) { return false; } };
+function readIndex() { try { return JSON.parse(lsRead(INDEX_KEY) || '[]') || []; } catch (_) { return []; } }
+function writeIndex(list) { lsWrite(INDEX_KEY, JSON.stringify(list)); }
+function loadRecord(id) {
+  const raw = lsRead(recordKey(id));
+  if (!raw) return null;
+  try { const st = migrate(JSON.parse(raw)); st.id = id; return st; }
   catch (e) {
     // Keep a copy rather than saving a blank client over it.
     console.error('Could not read the saved workings', e);
-    try { localStorage.setItem(STORE_KEY + ':unreadable', raw); } catch (_) {}
-    return blankState();
+    lsWrite(recordKey(id) + ':unreadable', raw);
+    return null;
   }
+}
+function load() {
+  // Workings saved before the client list become a client of their own (once:
+  // the old copy is kept under another name and removed from the old place).
+  const raw = lsRead(STORE_KEY);
+  if (raw) {
+    try {
+      const st = migrate(JSON.parse(raw));
+      writeRecord(st); lsWrite(CURRENT_KEY, st.id);
+      lsWrite(STORE_KEY + ':before-client-list', raw); localStorage.removeItem(STORE_KEY);
+    } catch (e) { console.error('Could not read the saved workings', e); lsWrite(STORE_KEY + ':unreadable', raw); try { localStorage.removeItem(STORE_KEY); } catch (_) {} }
+  }
+  const cur = lsRead(CURRENT_KEY), idx = readIndex();
+  return (cur && loadRecord(cur)) || (idx[0] && loadRecord(idx[0].id)) || blankState();
+}
+function clientSummary(st) {
+  let C = null; try { C = compute(st); } catch (_) {}
+  return {
+    id: st.id, name: st.client.name, taxYear: st.client.taxYear, updated: st.savedAt,
+    progress: { ...st.progress, meeting: st.meeting.date },
+    taxable: C ? C.taxable : null, jan: C ? C.tax.janTotal : null,
+  };
+}
+function writeRecord(st) {
+  if (!st.id) st.id = newId();
+  st.savedAt = new Date().toISOString();
+  const ok = lsWrite(recordKey(st.id), JSON.stringify(st));
+  const idx = readIndex().filter(e => e.id !== st.id);
+  if (has(st.client.name)) idx.push(clientSummary(st));
+  writeIndex(idx);
+  return ok;
+}
+function saveNow() {
+  clearTimeout(saveTimer);
+  if (!S) return;
+  if (!writeRecord(S)) toast("Couldn't save: this browser's storage is full or blocked. Export or back up, then delete old clients.");
+  lsWrite(CURRENT_KEY, S.id);
 }
 // Brings older saved workings up to the current layout.
 function migrate(data) {
@@ -747,6 +838,7 @@ function migrate(data) {
   if (!has(st.imp.uohCode)) st.imp.uohCode = '300';
   if (!st.uoh.timeMode) st.uoh.timeMode = has(st.uoh.hours) ? 'hours' : has(st.uoh.timePct) ? 'pct' : 'hours';
   st.ca.pools.forEach(pl => { if (!pl.kind) pl.kind = 'car'; });
+  if (!st.id) st.id = newId();
   st.v = 2;
   return st;
 }
@@ -757,8 +849,9 @@ function newItem(sec, extra = {}) {
 let saveTimer = null;
 function save() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch (_) {} }, 300);
+  saveTimer = setTimeout(saveNow, 300);
 }
+window.addEventListener('beforeunload', () => saveNow());
 function mergeDeep(base, extra) {
   if (!extra || typeof extra !== 'object' || Array.isArray(extra)) return extra === undefined ? base : extra;
   const out = { ...base };
@@ -1295,6 +1388,7 @@ function showTab(name) {
   try { sessionStorage.setItem('yearEnd:tab', name); } catch (_) {}
   if (name === 'email') renderEmail();
   if (name === 'meeting') renderReceived();
+  if (name === 'clients') { saveNow(); renderClients(); }
 }
 
 function calcRow(label, val, cls = '', prior) {
@@ -1307,7 +1401,10 @@ function refresh() {
   const { uoh, ca, tax } = C;
   const P = S.uoh.prior, PP = S.profit.prior;
 
-  $('#hdrClient').textContent = S.client.name || 'No client loaded';
+  renderClientPicker();
+  const st = nextStepOf({ ...S.progress, meeting: S.meeting.date });
+  out('nextStep', st ? `Next: ${st}` : 'Complete');
+  const rl = receivedItems(); out('pgReceivedHint', rl.length ? `${rl.filter(r => S.meeting.received[r.key]).length} of ${rl.length} ticked on the Meeting tab` : '');
   $('#hdrYear').textContent = `${S.client.taxYear} · ${S.client.basis}`;
   out('yearHint', hasRates(S.client.taxYear) ? `Set from the period end. ${esc(S.client.taxYear)} rates are built in.` : `<span class="chip warn">No ${esc(S.client.taxYear)} rates yet</span> Add them under Tax rates on the Export tab.`);
 
@@ -1685,7 +1782,13 @@ async function copyText(text, el, what) {
   try { await navigator.clipboard.writeText(text); toast(`Copied the ${what}.`); }
   catch (_) { el.focus(); el.select(); toast(`Press Ctrl+C to copy the ${what}.`); }
 }
-$('#emCopy').onclick = () => copyText(emailDoc().text, $('#em-body'), 'email');
+// Sending an email marks the stage it belongs to, if not already dated.
+function markEmailSent() {
+  const key = S.email.kind === 'accounts' ? 'sent' : 'requested';
+  if (!has(S.progress[key])) { S.progress[key] = ymd(new Date()); bindAll(); refresh(); }
+}
+$('#emCopy').onclick = () => { copyText(emailDoc().text, $('#em-body'), 'email'); markEmailSent(); };
+$('#emMail').addEventListener('click', markEmailSent);
 $('#emCopySubject').onclick = () => copyText(emailDoc().subject, $('#em-subject'), 'subject');
 
 // ── Accounts: Profit and Loss and the accounts PDF ─────────────────────────
@@ -1971,6 +2074,11 @@ function importTaxReturn(name, pages, lines) {
   const amt = (form, page, key) => { const t = get(form, page, key); return t == null ? null : (/^-?[\d,]+(\.\d+)?$/.test(t.replace(/\s/g, '')) ? num(t.replace(/\s/g, '')) : null); };
   const done = [];
 
+  const retName = ((lines[0] || []).map(l => l.match(/^\d{10}\s+([A-Za-z][A-Za-z .'-]+)$/)).find(Boolean) || [])[1] || '';
+  if (S.client.name && retName && !namesMatch(S.client.name, retName)) {
+    logMsg('warn', `${name} is for ${retName}, but these are ${S.client.name}'s workings, so it wasn't used. Open that client on the Clients tab (or start them as a new client), then drop it in again.`);
+    return;
+  }
   // No client yet: set one up for the year after this return.
   if (!S.client.name && yr) {
     // The first page has the UTR followed by the name, e.g. "4968995119 J VANDOROS".
@@ -2083,6 +2191,10 @@ function importAccountsPdf(name, pages) {
   const dirPage = pages.find(p => p.some(l => /^directory$/i.test(l)));
   let address = '';
   if (dirPage) { const i = dirPage.findIndex(l => /^address$/i.test(l)); if (i >= 0) address = dirPage.slice(i + 1).filter(l => l && !/accountants/i.test(l)).slice(0, 1).join(''); }
+  if (S.client.name && client && !namesMatch(S.client.name, client)) {
+    logMsg('warn', `${name} is for ${client}, but these are ${S.client.name}'s workings, so it wasn't used. Open ${client} on the Clients tab (or start them as a new client), then drop it in again.`);
+    return;
+  }
   if (!S.client.name && client) {
     // Nothing loaded yet: set this client up for the year after these accounts.
     S.client.name = client;
@@ -2313,7 +2425,12 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset && el.dataset.mtq != null && el.tagName === 'SELECT') { const q = meetingQuestions()[+el.dataset.mtq]; S.meeting.answers[q] = { ...(S.meeting.answers[q] || {}), a: el.value }; save(); }
-  if (el.dataset && el.dataset.received) { S.meeting.received[el.dataset.received] = el.checked; renderReceived(); save(); }
+  if (el.dataset && el.dataset.received) {
+    S.meeting.received[el.dataset.received] = el.checked;
+    const list = receivedItems();
+    if (list.length && list.every(r => S.meeting.received[r.key]) && !has(S.progress.received)) { S.progress.received = ymd(new Date()); bindAll(); }
+    renderReceived(); refresh();
+  }
 });
 $('#mtAddAdj').onclick = () => {
   S.meeting.adj.push({ date: '', desc: '', key: 'sundry', code: '', type: 'paid', amount: '', biz: '100' });
@@ -2420,6 +2537,134 @@ document.addEventListener('click', e => {
 window.addEventListener('focus', renderInbox);
 window.addEventListener('storage', e => { if (e.key === INBOX_KEY) { renderInbox(); toast('Lines from the Extraction Tool are waiting on the Client & import tab.'); } });
 
+// ── Clients ────────────────────────────────────────────────────────────────
+const STAGES = [['requested', 'Request information'], ['received', 'Receive information'], ['meeting', 'Hold the meeting'], ['sent', 'Send the accounts'], ['approved', 'Get approval'], ['filed', 'File the return']];
+const nextStepOf = pg => { const s = STAGES.find(([k]) => !has(pg[k])); return s ? s[1] : ''; };
+const namesMatch = (a, b) => { const last = n => String(n || '').trim().toLowerCase().split(/\s+/).pop(); return !a || !b || last(a) === last(b); };
+const shortDate = v => { const d = dayOf(v); return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''; };
+// Takes in workings from an import: the open client's record if it's the same
+// client and year (or nothing is open yet), otherwise a record of its own.
+function adopt(next) {
+  const cur = S, curOpen = has(cur.client.name);
+  const same = curOpen && sameClient(cur.client.name, next.client.name) && cur.client.taxYear === next.client.taxYear;
+  const known = next.id && next.id !== cur.id && lsRead(recordKey(next.id)) != null;
+  if (!known && (!curOpen || same)) next.id = cur.id;
+  else if (!known) { saveNow(); next.id = next.id && next.id !== cur.id ? next.id : newId(); next.imp.log = []; }
+  else saveNow();
+  S = next;
+  saveNow();
+}
+function renderAll() { renderLists(); renderRates(); refresh(); restoreResetRow(); }
+function switchTo(id) {
+  if (id === S.id) return;
+  saveNow();
+  const st = loadRecord(id);
+  if (!st) { toast("Those workings couldn't be read."); return; }
+  S = st; lsWrite(CURRENT_KEY, S.id);
+  renderAll();
+  toast(`Opened ${S.client.name || 'the client'}, ${S.client.taxYear}.`);
+}
+function newClient() {
+  saveNow();
+  S = blankState(); lsWrite(CURRENT_KEY, S.id);
+  renderAll(); showTab('client');
+  const el = $('#f-name'); if (el) el.focus();
+  toast('New client: enter a name, or drop in last year\'s files.');
+}
+function deleteClient(id) {
+  try { localStorage.removeItem(recordKey(id)); } catch (_) {}
+  writeIndex(readIndex().filter(e => e.id !== id));
+  if (id === S.id) {
+    const next = readIndex()[0];
+    S = (next && loadRecord(next.id)) || blankState();
+    lsWrite(CURRENT_KEY, S.id);
+    renderAll();
+  } else renderClients();
+}
+function clientRows() {
+  const idx = readIndex();
+  const rows = idx.map(e => (e.id === S.id ? clientSummary(S) : e));
+  return rows.sort((a, b) => a.name.localeCompare(b.name) || b.taxYear.localeCompare(a.taxYear));
+}
+function renderClientPicker() {
+  const sel = $('#clientPick');
+  const rows = clientRows();
+  const opts = rows.map(r => `<option value="${esc(r.id)}">${esc(r.name)} · ${esc(r.taxYear)}</option>`);
+  if (!has(S.client.name)) opts.unshift(`<option value="${esc(S.id)}">New client · ${esc(S.client.taxYear)}</option>`);
+  opts.push('<option value="__new">+ New client</option>');
+  const html = opts.join('');
+  if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }
+  sel.value = S.id;
+}
+$('#clientPick').addEventListener('change', e => {
+  const v = e.target.value;
+  if (v === '__new') newClient(); else switchTo(v);
+  renderClientPicker();
+});
+$('#newClientBtn').onclick = newClient;
+function renderClients() {
+  const rows = clientRows();
+  const cell = v => (has(v) ? `<span class="chip">${esc(shortDate(v))}</span>` : '<span class="muted">–</span>');
+  $('#clientsTable').innerHTML = rows.map(r => {
+    const pg = r.progress || {}, step = nextStepOf(pg);
+    return `<tr${r.id === S.id ? ' class="key"' : ''}>
+      <td><button class="btn link" type="button" data-open-client="${esc(r.id)}">${esc(r.name)}</button></td><td>${esc(r.taxYear)}</td>
+      ${STAGES.map(([k]) => `<td>${cell(pg[k])}</td>`).join('')}
+      <td>${step ? esc(step) : '<span class="chip">Complete</span>'}</td>
+      <td class="n">${r.taxable != null ? fmt0(r.taxable) : '–'}</td><td class="n">${r.jan != null ? fmt0(r.jan) : '–'}</td>
+      <td><button class="btn link danger" type="button" data-delete-client="${esc(r.id)}" aria-label="Delete ${esc(r.name)} ${esc(r.taxYear)}">✕</button></td></tr>`;
+  }).join('') || '<tr><td colspan="12" class="muted">No clients yet. Click + New client, or drop last year\'s files onto the Client & import tab.</td></tr>';
+}
+document.addEventListener('click', e => {
+  const o = e.target.closest('[data-open-client]');
+  if (o) { switchTo(o.dataset.openClient); showTab('client'); return; }
+  const d = e.target.closest('[data-delete-client]');
+  if (d) {
+    const id = d.dataset.deleteClient, r = clientRows().find(x => x.id === id);
+    const td = d.parentElement;
+    td.innerHTML = `<span class="confirm" style="padding:2px 6px;"><button class="btn danger" type="button" data-delete-yes="${esc(id)}">Delete ${esc(r ? r.name : '')} ${esc(r ? r.taxYear : '')}</button><button class="btn" type="button" data-delete-no>Keep</button></span>`;
+    return;
+  }
+  const y = e.target.closest('[data-delete-yes]');
+  if (y) { deleteClient(y.dataset.deleteYes); renderClients(); toast('Deleted.'); return; }
+  if (e.target.closest('[data-delete-no]')) renderClients();
+});
+// Backup: every client's workings, plus this browser's rates, firm details and sign-off.
+$('#backupBtn').onclick = () => {
+  saveNow();
+  const clients = readIndex().map(e => loadRecord(e.id)).filter(Boolean);
+  const data = { app: 'year-end-tool', version: 1, savedAt: new Date().toISOString(), clients, rates: customRates, firm: JSON.parse(lsRead(FIRM_KEY) || 'null'), signature: lsRead(SIG_KEY) };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  a.download = `year-end-tool-backup-${ymd(new Date())}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  out('backupNote', `Backed up ${clients.length} client record${clients.length !== 1 ? 's' : ''}.`);
+};
+function restoreYearEndBackup(name, data) {
+  saveNow();
+  let added = 0, updated = 0, kept = 0;
+  (data.clients || []).forEach(raw => {
+    const st = migrate(raw), mine = loadRecord(st.id);
+    if (mine && mine.savedAt && st.savedAt && mine.savedAt > st.savedAt) { kept++; return; }
+    const savedAt = st.savedAt; writeRecord(st); if (savedAt) { st.savedAt = savedAt; lsWrite(recordKey(st.id), JSON.stringify(st)); }
+    if (mine) updated++; else added++;
+  });
+  Object.entries(data.rates || {}).forEach(([y, r]) => { if (!customRates[y]) customRates[y] = r; }); saveRates();
+  if (data.firm && lsRead(FIRM_KEY) == null) lsWrite(FIRM_KEY, JSON.stringify(data.firm));
+  if (data.signature != null && lsRead(SIG_KEY) == null) lsWrite(SIG_KEY, data.signature);
+  const reloaded = loadRecord(S.id); if (reloaded) S = reloaded;
+  renderAll(); renderClients();
+  const msg = `${name}: ${added} client record${added !== 1 ? 's' : ''} added, ${updated} updated${kept ? `, ${kept} kept because this browser's copy is newer` : ''}.`;
+  logMsg('ok', msg); out('backupNote', msg); toast('Backup restored.');
+}
+$('#restoreIn').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try { const data = JSON.parse(await f.text()); if (data.app !== 'year-end-tool') throw new Error('not a Year End Tool backup'); restoreYearEndBackup(f.name, data); }
+  catch (err) { toast(`${f.name}: ${err.message}.`); }
+});
+
 // ── Rates editor ───────────────────────────────────────────────────────────
 function renderRates() {
   const year = S.client.taxYear;
@@ -2472,11 +2717,11 @@ function toast(msg, action) {
 
 // Clear with an in-page confirmation step.
 function restoreResetRow() {
-  $('#resetRow').innerHTML = `<button class="btn danger" id="resetBtn" type="button">Clear this client</button><span class="muted small">Export first if you want to keep the workings.</span>`;
+  $('#resetRow').innerHTML = `<button class="btn danger" id="resetBtn" type="button">Delete these workings</button><span class="muted small">Removes this client's ${esc(S ? S.client.taxYear : '')} workings from this browser. Export or back up first if you want to keep them.</span>`;
   $('#resetBtn').onclick = () => {
-    $('#resetRow').innerHTML = `<div class="confirm"><span>Clear every figure for ${esc(S.client.name || 'this client')}?</span>
-      <button class="btn danger" type="button" id="resetYes">Clear</button><button class="btn" type="button" id="resetNo">Keep</button></div>`;
-    $('#resetYes').onclick = () => { S = blankState(); restoreResetRow(); renderLists(); renderRates(); refresh(); toast('Cleared.'); };
+    $('#resetRow').innerHTML = `<div class="confirm"><span>Delete ${esc(S.client.name || 'this client')}'s ${esc(S.client.taxYear)} workings?</span>
+      <button class="btn danger" type="button" id="resetYes">Delete</button><button class="btn" type="button" id="resetNo">Keep</button></div>`;
+    $('#resetYes').onclick = () => { const nm = S.client.name || 'The client'; deleteClient(S.id); restoreResetRow(); toast(`${nm}'s workings deleted.`); };
     $('#resetNo').onclick = restoreResetRow;
   };
 }
@@ -2512,7 +2757,7 @@ async function handleFiles(files) {
   const order = f => /\.xls/i.test(f.name) ? 0 : /\.pdf$/i.test(f.name) ? 1 : /\.json$/i.test(f.name) ? 2 : 3;
   for (const f of files.sort((a, b) => order(a) - order(b))) {
     try {
-      if (/\.json$/i.test(f.name)) importBackup(f.name, JSON.parse(await f.text()));
+      if (/\.json$/i.test(f.name)) { const data = JSON.parse(await f.text()); if (data && data.app === 'year-end-tool') restoreYearEndBackup(f.name, data); else importBackup(f.name, data); }
       else if (/\.pdf$/i.test(f.name)) await importPdf(f.name, await f.arrayBuffer());
       else if (/\.csv$/i.test(f.name)) importCsv(f.name, csvText(await f.arrayBuffer()));
       else {
@@ -2779,7 +3024,7 @@ function importWorkingPapers(name, wb) {
   }
 
   fillPriorFromAccounts(fresh);
-  S = fresh;
+  adopt(fresh);
   notes.reverse().forEach(([c, m]) => logMsg(c, m));
   logMsg('ok', `${name}: last year's working papers for ${S.client.name || 'the client'} loaded. This year set to ${S.client.taxYear}.`);
   if (!hasRates(S.client.taxYear)) logMsg('warn', `There are no ${S.client.taxYear} rates built in yet. Add them under Tax rates on the Export tab.`);
@@ -2794,13 +3039,16 @@ function importOwnExport(name, wb) {
   Object.entries(data.rates || {}).forEach(([y, r]) => { if (!hasRates(y)) { customRates[y] = r; saveRates(); } });
   delete data.rates;
   const last = migrate(data);
-  if (last.client.taxYear === S.client.taxYear && (!S.client.name || S.client.name === last.client.name)) {
-    S = last;
+  // Reopen the same year's workings; roll an earlier year forward.
+  const reopen = sameClient(S.client.name, last.client.name) ? last.client.taxYear === S.client.taxYear
+    : (lsRead(recordKey(last.id)) != null || last.client.taxYear >= currentWorkYear());
+  if (reopen) {
+    adopt(last);
     logMsg('ok', `${name}: reopened ${S.client.name}'s ${S.client.taxYear} workings.`);
     toast('Workings reopened.');
     return;
   }
-  S = rollForward(last);
+  adopt(rollForward(last));
   logMsg('ok', `${name}: rolled ${last.client.taxYear} forward to ${S.client.taxYear}. Last year's figures are now the comparatives.`);
   if (!hasRates(S.client.taxYear)) logMsg('warn', `There are no ${S.client.taxYear} rates built in yet. Add them under Tax rates on the Export tab.`);
   toast('Rolled forward from last year.');

@@ -6,6 +6,8 @@ It is a single web page with no server, hosted free on **GitHub Pages**, like th
 
 ## What it does
 
+- **Clients**: each client's workings for each tax year are saved separately in the browser. Pick a client from the list at the top, or open one from the **Clients** tab, which shows every client's progress (information requested and received, meeting, accounts sent, approved, return filed), next step, taxable profit and 31 January payment. Importing another client's files, or rolling a client forward a year, starts its own record rather than overwriting the one open. **Back up all clients** saves everything (with your rates, firm details and sign-off) to a file; **Restore from backup** brings it back or moves it to another browser.
+- **Progress**: on the Client & import tab. Some dates fill themselves in: copying the information request, ticking off everything received on the Meeting tab, and copying the accounts email.
 - **Client & import**: drop in any mix of the following.
   - **Last year's working papers** (.xlsx with Checklists, Expenses, Tax, CA and TB sheets). It brings forward:
     - the client name and period;
@@ -39,7 +41,7 @@ It is a single web page with no server, hosted free on **GitHub Pages**, like th
   - **Excel workbook** with Summary, Use of Home, CA, Tax and Tax return sheets. The Summary sheet has the profit, the other income and reliefs, the year's rates and the tax calculation as Excel formulas, so typing a different trading profit into it updates the tax. The full workings are kept in a hidden sheet, so next year you drop the file back in to roll forward.
   - **Xero manual journals CSV** with up to three journals, each balanced to 990 (clearing). **Use of Home** debits each cost item's business share to 300, to the penny, with the item's note from the Use of Home tab. **Capital allowances** debits each pool's allowance to 315, described as e.g. "Mercedes EQA: TWDV b/fwd £16,810 @ 18% WDA and 50% business use, TWDV c/fwd balance is £13,784.20". **Meeting adjustments** debits costs paid personally, credits private use (to 980) and unbanked income. Any journal can be left out, and the account codes, date and tax rate can be changed on the Export tab. Import it in Xero under Accounting → Manual journals → Import.
 
-Work in progress is saved in the browser as you type. The exported workbook is the copy to keep with the client's file.
+Work in progress is saved in the browser as you type, one record per client and tax year. Clearing the browser's data deletes it, so back up from the Clients tab now and then. The exported workbook is the copy to keep with the client's file.
 
 ## One-time setup
 
