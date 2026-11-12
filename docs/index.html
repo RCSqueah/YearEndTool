@@ -403,13 +403,13 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     <div class="panel-head"><div><h2>Profit and Loss</h2><p class="muted small">This year from a Xero Profit and Loss export, last year from last year's accounts PDF, working papers or export. Adjust any line in the Adjustment column.</p></div></div>
     <label class="check" id="plToolWrap"><input type="checkbox" id="pl-tool"> <span data-out="plToolLabel"></span></label>
     <div class="note info" data-out="plCheck" hidden></div>
-    <div class="table-wrap"><table class="calc"><thead><tr><th></th><th class="n">From Xero</th><th class="n">Adjustment</th><th class="n" data-out="plYearNow"></th><th class="n" data-out="plYearPrior"></th></tr></thead><tbody id="plTable"></tbody></table></div>
+    <div class="table-wrap"><table class="calc"><thead><tr><th></th><th class="n">Imported</th><th class="n">Adjustment</th><th class="n" data-out="plYearNow"></th><th class="n" data-out="plYearPrior"></th></tr></thead><tbody id="plTable"></tbody></table></div>
     <div class="row-actions"><button class="btn" type="button" id="plToTax">Use this net profit on the Tax tab</button><span class="muted small" data-out="plTaxNote"></span></div>
   </section>
 
   <section class="panel" id="plXeroPanel">
-    <div class="panel-head"><div><h2>Xero accounts</h2><p class="muted small" data-out="plXeroSource"></p></div></div>
-    <div class="table-wrap"><table class="items"><thead><tr><th>Xero account</th><th>Xero section</th><th class="n">Amount</th><th>Goes in</th></tr></thead><tbody id="plXeroTable"></tbody></table></div>
+    <div class="panel-head"><div><h2>Imported accounts</h2><p class="muted small" data-out="plXeroSource"></p></div></div>
+    <div class="table-wrap"><table class="items"><thead><tr><th>Account</th><th>From</th><th class="n">Amount</th><th>Goes in</th></tr></thead><tbody id="plXeroTable"></tbody></table></div>
   </section>
 
   <section class="panel">
@@ -622,7 +622,7 @@ function blankState() {
   return {
     v: 2,
     client: { name: '', taxYear: '2025/26', start: '2025-04-06', end: '2026-04-05', basis: 'Cash basis', address: '' },
-    imp: { uohCode: '', inPeriodOnly: true, log: [] },
+    imp: { uohCode: '', inPeriodOnly: true, log: [], chart: [] },
     profit: { turnover: '', otherIncome: '', expenses: '', netOverride: '', adjustments: '', prior: {} },
     journal: { uohCode: '300', caCode: '315', clearCode: '990', date: '', taxRate: 'No VAT', includeUoh: true, includeCa: true },
     uoh: {
@@ -1561,7 +1561,47 @@ function plGuess(line) {
   const g = PL_GUESS.find(([re]) => re.test(line.name));
   return g ? g[1] : 'sundry';
 }
-const plKeyFor = (st, line) => (st.accounts.map && st.accounts.map[line.name]) || plGuess(line);
+const plKeyFor = (st, line) => (st.accounts.map && st.accounts.map[line.name]) || line.guess || plGuess(line);
+// Imported lines that aren't Profit and Loss lines of their own.
+const PL_ELSEWHERE = [{ key: 'uohcosts', label: 'Use of Home costs (claimed on the Use of Home tab)' }, { key: 'skip', label: 'Leave out of the accounts' }];
+// The firm's usual account codes, as used in the Extraction Tool.
+const CODE_LINES = {
+  '100': ['Sales', 'revenue'], '200': ['Direct Costs', 'direct'], '300': ['Use of Home', 'uohcosts'], '301': ['Travelling Expenses', 'travel'],
+  '302': ['Motor Expenses', 'motor'], '303': ['Telephone and Internet', 'telephone'], '304': ['Business Insurance', 'insurance'],
+  '308': ['Laundry and Protective Clothing', 'laundry'], '309': ['Advertising and Marketing', 'advertising'], '311': ['Accountancy and Bookkeeping', 'accountancy'],
+  '312': ['Printing, Postage and Stationery', 'printing'], '313': ['Computer Expenses', 'computer'], '315': ['Capital Expenditure', 'capex'],
+  '980': ['Personal Use Adjustments', 'skip'], '990': ['Clearing Account', 'skip'],
+};
+function uohImportCode() { return String(S.imp.uohCode || (S.journal && S.journal.uohCode) || '300').trim(); }
+// Bank or Bills CSV lines, one Profit and Loss row per account code.
+function addLinesToAccounts(name, rows, kind) {
+  const byCode = new Map(); let outside = 0;
+  rows.forEach(r => {
+    if (!r.code) return;
+    if (!inPeriod(r.date)) { outside++; return; }
+    const g = byCode.get(r.code) || { raw: 0, words: [] };
+    g.raw += r.raw; g.words.push(r.desc); byCode.set(r.code, g);
+  });
+  if (!byCode.size) return;
+  const chart = (S.imp.chart || []).reduce((m, a) => (m[a.code] = a.name, m), {});
+  const lines = [...byCode.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })).map(([code, g]) => {
+    const known = CODE_LINES[code];
+    const acc = chart[code] || (known && known[0]) || `Account ${code}`;
+    const n = Number(code);
+    let guess;
+    if (code === uohImportCode()) guess = 'uohcosts';
+    else if (/personal|drawing|clearing|suspense/i.test(acc) || n >= 800) guess = 'skip';
+    else if (known && !chart[code]) guess = known[1];
+    else guess = plKeyOf(acc) || (n < 200 ? 'revenue' : n < 300 ? 'direct' : plGuess({ name: `${acc} ${g.words.join(' ')}`, type: 'exp' }));
+    const income = guess === 'revenue';
+    return { name: `${code} ${acc}`, code, section: kind, type: income ? 'sales' : 'exp', amount: r2(income ? g.raw : -g.raw), guess, file: name, count: g.words.length };
+  });
+  // Replace anything from this file, and any Xero Profit and Loss report.
+  S.accounts.xero = (S.accounts.xero || []).filter(l => l.file && l.file !== name && l.section !== 'Xero Profit and Loss').concat(lines);
+  S.accounts.xeroFile = [...new Set(S.accounts.xero.map(l => l.file))].join(', ');
+  S.accounts.xeroNet = null; S.accounts.addTool = null;
+  logMsg('ok', `${name}: ${lines.length} accounts for the Accounts tab's Profit and Loss${outside ? ` (${outside} lines outside the period left out)` : ''}.`);
+}
 
 function plFigures(st = S, C = compute(st)) {
   const A = st.accounts || {};
@@ -1570,7 +1610,8 @@ function plFigures(st = S, C = compute(st)) {
   const addTool = A.addTool != null ? A.addTool : !r2(xeroUoh);
   const rows = {};
   PL_LINES.forEach(l => {
-    const xero = r2((A.xero || []).filter(x => plKeyFor(st, x) === l.key).reduce((a, x) => a + x.amount, 0));
+    // An income account moved to a cost line (or the reverse) changes sign.
+    const xero = r2((A.xero || []).filter(x => plKeyFor(st, x) === l.key).reduce((a, x) => a + ((l.group === 'sales') === (x.type === 'sales') ? x.amount : -x.amount), 0));
     const tool = addTool ? (l.key === 'uoh' ? C.uoh.figure : l.key === 'capex' ? C.ca.figure : 0) : 0;
     const adj = num((A.adj || {})[l.key]);
     const value = r2(xero + adj + tool);
@@ -1636,7 +1677,7 @@ function renderAccounts(C) {
   out('plXeroSource', A.xeroFile ? `From ${esc(A.xeroFile)}. Change "Goes in" for any account; it's remembered for this client.` : '');
   const sig = JSON.stringify([A.xeroFile, (A.xero || []).length, A.map]);
   if ($('#plXeroTable').dataset.sig !== sig) $('#plXeroTable').dataset.sig = sig, $('#plXeroTable').innerHTML = (A.xero || []).map((x, i) => `<tr><td>${esc(x.name)}</td><td class="muted small">${esc(x.section || '')}</td><td class="n">${fmt(x.amount)}</td>
-    <td><select id="plmap-${i}" data-plmap="${esc(x.name)}" aria-label="Goes in">${PL_LINES.map(l => `<option value="${l.key}"${plKeyFor(S, x) === l.key ? ' selected' : ''}>${esc(l.label)}</option>`).join('')}</select></td></tr>`).join('');
+    <td><select id="plmap-${i}" data-plmap="${esc(x.name)}" aria-label="Goes in">${[...PL_LINES, ...PL_ELSEWHERE].map(l => `<option value="${l.key}"${plKeyFor(S, x) === l.key ? ' selected' : ''}>${esc(l.label)}</option>`).join('')}</select></td></tr>`).join('');
   out('accPdfName', esc(accountsFileName()));
   firmFields();
 }
@@ -1676,7 +1717,7 @@ function importXeroPL(name, rows) {
     lines.push({ name: label.replace(/^\d+\s*[-–]\s*/, '').trim(), section, type, amount: r2(amt) });
   });
   if (!lines.length) { logMsg('warn', `${name}: no accounts found in this Profit and Loss report.`); return; }
-  S.accounts.xero = lines; S.accounts.xeroFile = name; S.accounts.xeroNet = xeroNet; S.accounts.addTool = null;
+  S.accounts.xero = lines.map(l => ({ ...l, section: l.section || 'Xero Profit and Loss', file: name })); S.accounts.xeroFile = name; S.accounts.xeroNet = xeroNet; S.accounts.addTool = null;
   logMsg('ok', `${name}: Xero Profit and Loss with ${lines.length} accounts${xeroNet != null ? `, net profit ${fmt(xeroNet)}` : ''}. See the Accounts tab.`);
   toast('Xero Profit and Loss loaded.');
 }
@@ -1942,7 +1983,7 @@ async function handleFiles(files) {
     try {
       if (/\.json$/i.test(f.name)) importBackup(f.name, JSON.parse(await f.text()));
       else if (/\.pdf$/i.test(f.name)) await importAccountsPdf(f.name, await f.arrayBuffer());
-      else if (/\.csv$/i.test(f.name)) importCsv(f.name, await f.text());
+      else if (/\.csv$/i.test(f.name)) importCsv(f.name, csvText(await f.arrayBuffer()));
       else {
         const wb = XLSX.read(await f.arrayBuffer());
         if (wb.SheetNames.includes('YE_DATA')) importOwnExport(f.name, wb);
@@ -1955,6 +1996,12 @@ async function handleFiles(files) {
     }
   }
   renderLists(); renderRates(); refresh();
+}
+
+// CSVs saved by Excel are often Windows-1252, where £ isn't valid UTF-8.
+function csvText(buf) {
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch (_) { return new TextDecoder('windows-1252').decode(buf); }
 }
 
 // ── Last year's working papers ─────────────────────────────────────────────
@@ -2301,8 +2348,14 @@ function importCsv(name, text) {
   const isBank = c('payee') >= 0 && c('accountcode') >= 0 && c('amount') >= 0;
   const isBills = c('contactname') >= 0 && c('accountcode') >= 0 && c('unitamount') >= 0;
   if (!isBank && !isBills) { logMsg('warn', `${name}: no Account Code column, so Use of Home lines can't be picked out.`); return; }
-  const code = String(S.imp.uohCode || '').trim();
-  if (!code) { logMsg('warn', `${name}: enter the Use of Home account code above (or drop in the Extraction Tool backup), then drop this file in again.`); return; }
+  const code = uohImportCode();
+  addLinesToAccounts(name, body.map(r => ({
+    code: String(r[c('accountcode')] || '').trim(),
+    date: parseDate(r[c(isBank ? 'date' : 'invoicedate')]),
+    desc: `${(isBank ? r[c('payee')] : r[c('contactname')]) || ''} ${r[c('description')] || ''}`,
+    // In the accounts' own sign: money in positive for income, money out positive for costs.
+    raw: isBank ? num(r[c('amount')]) : -num(r[c('unitamount')]) * (num(r[c('quantity')]) || 1),
+  })), isBank ? 'Bank CSV' : 'Bills CSV');
   const found = []; let outside = 0;
   body.forEach(r => {
     if (String(r[c('accountcode')] || '').trim() !== code) return;
@@ -2368,6 +2421,7 @@ function importBackup(name, data) {
   const match = clients.find(d => String(d.name || '').toLowerCase().trim() === want)
     || clients.find(d => want && String(d.name || '').toLowerCase().includes(want.split(' ')[0]));
   if (!match) { logMsg('warn', `${name}: no client called "${S.client.name || '?'}" in this backup (${clients.length} client${clients.length !== 1 ? 's' : ''}). Set the client name first.`); return; }
+  S.imp.chart = match.coa.accounts.map(a => ({ code: String(a.code), name: a.name }));
   const acc = match.coa.accounts.find(a => isUohName(a.name));
   if (acc) { S.imp.uohCode = String(acc.code); logMsg('ok', `${name}: ${match.name}'s Use of Home account is ${acc.code} - ${acc.name}.`); }
   else logMsg('warn', `${name}: ${match.name} has no Use of Home account in the backup.`);
