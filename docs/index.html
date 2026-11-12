@@ -2591,14 +2591,13 @@ function renderClientPicker() {
   const rows = clientRows();
   const opts = rows.map(r => `<option value="${esc(r.id)}">${esc(r.name)} · ${esc(r.taxYear)}</option>`);
   if (!has(S.client.name)) opts.unshift(`<option value="${esc(S.id)}">New client · ${esc(S.client.taxYear)}</option>`);
-  opts.push('<option value="__new">+ New client</option>');
   const html = opts.join('');
   if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }
   sel.value = S.id;
 }
 $('#clientPick').addEventListener('change', e => {
   const v = e.target.value;
-  if (v === '__new') newClient(); else switchTo(v);
+  switchTo(v);
   renderClientPicker();
 });
 $('#newClientBtn').onclick = newClient;
@@ -2610,7 +2609,7 @@ function renderClients() {
     return `<tr${r.id === S.id ? ' class="key"' : ''}>
       <td><button class="btn link" type="button" data-open-client="${esc(r.id)}">${esc(r.name)}</button></td><td>${esc(r.taxYear)}</td>
       ${STAGES.map(([k]) => `<td>${cell(pg[k])}</td>`).join('')}
-      <td>${step ? esc(step) : '<span class="chip">Complete</span>'}</td>
+      <td style="white-space:nowrap;">${step ? esc(step) : '<span class="chip">Complete</span>'}</td>
       <td class="n">${r.taxable != null ? fmt0(r.taxable) : '–'}</td><td class="n">${r.jan != null ? fmt0(r.jan) : '–'}</td>
       <td><button class="btn link danger" type="button" data-delete-client="${esc(r.id)}" aria-label="Delete ${esc(r.name)} ${esc(r.taxYear)}">✕</button></td></tr>`;
   }).join('') || '<tr><td colspan="12" class="muted">No clients yet. Click + New client, or drop last year\'s files onto the Client & import tab.</td></tr>';
