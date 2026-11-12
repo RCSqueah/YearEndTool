@@ -1718,6 +1718,26 @@ function plFigures(st = S, C = compute(st)) {
   const tot = f => { const sales = sum('sales', f), cos = sum('cos', f), exp = sum('exp', f); return { sales, cos, gross: sales - cos, exp, net: sales - cos - exp }; };
   return { rows, addTool, xeroUoh: r2(xeroUoh), now: tot(r => r.shown), exact: tot(r => r.value), prior: anyPrior ? tot(r => r.prior) : null };
 }
+// Last year's figures for the Tax tab, Use of Home and CA comparatives, worked out
+// from last year's Profit and Loss. Only fills what isn't already known (the
+// working papers' TB is more exact where it was read).
+function fillPriorFromAccounts(st) {
+  const A = st.accounts.prior || {};
+  if (!Object.keys(A).length) return 0;
+  const v = k => (A[k] != null ? A[k] : 0);
+  const sales = v('revenue'), cos = v('direct');
+  const exp = PL_LINES.filter(l => l.group === 'exp').reduce((a, l) => a + v(l.key), 0);
+  const uoh = v('uoh'), capex = v('capex'), netPL = r2(sales - cos - exp);
+  const PP = st.profit.prior, set = (k, val) => { if (PP[k] == null) { PP[k] = val; n++; } };
+  let n = 0;
+  set('turnover', sales); set('otherIncome', 0);
+  set('expenses', r2(cos + exp - uoh - capex)); // the Tax tab shows Use of Home and capital allowances on their own lines
+  set('uoh', uoh); set('ca', capex); set('net', r2(netPL + capex)); set('adjustments', 0); set('taxable', netPL);
+  if (st.uoh.prior.total == null && uoh) { st.uoh.prior.total = uoh; n++; }
+  if (st.ca.prior.total == null && capex) { st.ca.prior.total = capex; n++; }
+  return n;
+}
+
 function plYears() { const e = dayOf(S.client.end); const y = e ? e.getFullYear() : yearEnd(S.client.taxYear); return { now: String(y), prior: String(y - 1) }; }
 // The printed layout: headings, lines, totals.
 function plSections(F) {
@@ -1869,6 +1889,7 @@ async function importAccountsPdf(name, buf) {
   }
   if (address && !has(S.client.address)) S.client.address = address;
   S.accounts.prior = prior; S.accounts.priorSource = name;
+  if (fillPriorFromAccounts(S)) logMsg('ok', `${name}: last year's turnover, expenses, Use of Home, capital expenditure and profit filled in as comparatives on the Tax tab.`);
   logMsg('ok', `${name}: last year's Profit and Loss read (${Object.keys(prior).length} lines${ye ? `, year ended ${ye[1]}` : ''})${address ? `, address ${address}` : ''}.`);
   toast("Last year's accounts read.");
 }
@@ -2321,6 +2342,7 @@ function importWorkingPapers(name, wb) {
     if (isNum(taxable)) pp.taxable = taxable;
   }
 
+  fillPriorFromAccounts(fresh);
   S = fresh;
   notes.reverse().forEach(([c, m]) => logMsg(c, m));
   logMsg('ok', `${name}: last year's working papers for ${S.client.name || 'the client'} loaded. This year set to ${S.client.taxYear}.`);
