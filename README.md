@@ -22,6 +22,11 @@ It is a single web page with no server, hosted free on **GitHub Pages**, like th
 - **Tax year**: set from the period end date. Importing last year's working papers sets this year's period to the twelve months after last year's, and rolling an export forward moves it on a year. Change the period end on the Client tab and the tax year follows.
 - **Tax rates**: built in for 2024/25, 2025/26 and 2026/27 (England, Wales and Northern Ireland), so nothing needs entering. They can be viewed or changed under Tax rates at the bottom of the Export tab, which is also where a year that isn't built in yet can be added.
 - **Client email**: writes the year's information request from last year's workings. It names each household bill, vehicle, bank, investment, pension, property and charity, with last year's figures if you want them, and ends with a general question about other income and changes. Untick anything you don't need, edit the wording, then copy it or open it in your email app.
+- **Accounts**: the client's Unaudited Financial Statements as a PDF, in the firm's layout: Cover, Directory, Client Approval, Accountants' and Bookkeepers' Report, and Profit and Loss.
+  - This year's figures come from a Xero Profit and Loss export. Each Xero account is matched to a Profit and Loss line, and you can change any match. The tool's Use of Home and capital allowances are added unless the journals are already in Xero.
+  - Last year's column comes from last year's accounts PDF, the working papers' Profit and Loss sheet, or last year's export.
+  - Any line can be adjusted, and the net profit can be sent to the Tax tab.
+  - The firm's details are saved in the browser.
 - **Use of Home**: running costs, work space by rooms, time by hours a week (divided by the hours in a working day, 7.5 by default), business days a week or a %, and an optional partner's share. The HMRC flat rate is shown alongside, and you choose which method to claim. Amounts accept sums like `127.23*12`.
 - **Capital allowances**: main pool (18%, AIA, small pools allowance), special rate pool (6%), and single-asset pools for vehicles and equipment with private use. A car can take 18%, 6% or the 100% first-year allowance; a van or equipment can take AIA. Disposals give balancing allowances or charges. Last year's calculation is shown underneath.
 - **Tax**: laid out as the return asks for it. Self-employment (SA103), employments (SA102), interest and dividends by account, pensions, UK property (SA105), other income, pension contributions and Gift Aid by charity. Every section takes as many lines as needed, each with its own notes and last year's figure. The tab also covers student loan, the High Income Child Benefit Charge, Class 4 NI and payments on account.
@@ -47,3 +52,6 @@ Open **Export → Tax rates** and click **Add next year's rates**. Change the fi
 |---|---|
 | `docs/index.html` | The tool itself |
 | `docs/vendor/xlsx-0.18.5.full.min.js` | A bundled copy of SheetJS for reading and writing Excel files |
+| `docs/vendor/jspdf-2.5.1.umd.min.js` | A bundled copy of jsPDF, which writes the accounts PDF |
+| `docs/vendor/pdfjs-3.11.174/` | A bundled copy of Mozilla's PDF.js, which reads last year's accounts PDF |
+| `docs/firm-logo.js` | The firm's logo for the accounts PDF |

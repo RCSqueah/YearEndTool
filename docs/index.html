@@ -170,6 +170,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
       <button role="tab" data-tab="email">Client email</button>
       <button role="tab" data-tab="uoh">Use of Home</button>
       <button role="tab" data-tab="ca">Capital allowances</button>
+      <button role="tab" data-tab="accounts">Accounts</button>
       <button role="tab" data-tab="tax">Tax</button>
       <button role="tab" data-tab="return">Tax return</button>
       <button role="tab" data-tab="export">Export</button>
@@ -199,7 +200,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
   <section class="panel">
     <div class="panel-head"><h2>Bring in last year and this year's figures</h2></div>
     <div class="drop" id="drop">
-      <p><b>Drop files here</b> or <label class="btn link">choose files<input type="file" id="fileIn" multiple accept=".xlsx,.xlsm,.xls,.csv,.json"></label></p>
+      <p><b>Drop files here</b> or <label class="btn link">choose files<input type="file" id="fileIn" multiple accept=".xlsx,.xlsm,.xls,.csv,.json,.pdf"></label></p>
       <p class="muted small">You can drop several files at once. The tool recognises each one by its contents.</p>
     </div>
     <div class="grid2 small">
@@ -207,6 +208,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
         <h3 style="margin-bottom:6px;">Last year</h3>
         <ul class="muted" style="margin:0;padding-left:18px;display:grid;gap:4px;">
           <li><b>Last year's working papers</b> (.xlsx with Expenses, Tax and CA sheets). Brings forward the Use of Home items and splits, the CA calculation and balances, and each Tax sheet line as a comparative.</li>
+          <li><b>Last year's accounts PDF</b> (the Unaudited Financial Statements). Gives last year's Profit and Loss column and the client's address.</li>
           <li><b>Last year's export from this tool</b> (.xlsx). Rolls everything forward. If it's the same tax year, it reopens it for editing.</li>
         </ul>
       </div>
@@ -215,6 +217,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
         <ul class="muted" style="margin:0;padding-left:18px;display:grid;gap:4px;">
           <li><b>Bank Statement or Bills CSV</b>. Lines coded to the Use of Home account are added to this year's Use of Home costs.</li>
           <li><b>Xero Account Transactions export</b> (.csv). Reads the Use of Home account by name, plus any "1 of 3 rooms" adjustment.</li>
+          <li><b>Xero Profit and Loss export</b> (.xlsx or .csv). Fills this year's Profit and Loss on the Accounts tab.</li>
           <li><b>Extraction Tool backup</b> (.json). Looks up this client's Use of Home account code.</li>
         </ul>
       </div>
@@ -389,6 +392,50 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     <div class="table-wrap"><table><thead><tr><th>Pool</th><th class="n">TWDV b/fwd</th><th class="n">Additions</th><th class="n">AIA / FYA</th><th class="n">Disposals</th><th class="n">WDA / balancing</th><th class="n">TWDV c/fwd</th><th class="n">Business %</th><th class="n">Allowance claimed</th></tr></thead>
       <tbody id="caPriorTable"></tbody></table></div>
     <div class="field" id="caPriorNotesWrap"><span>Last year's notes</span><div class="prior-text" data-out="caPriorNotes"></div></div>
+  </section>
+  </div>
+</div>
+
+<!-- ───────────── ACCOUNTS ───────────── -->
+<div data-pane="accounts" hidden>
+  <div class="stack">
+  <section class="panel">
+    <div class="panel-head"><div><h2>Profit and Loss</h2><p class="muted small">This year from a Xero Profit and Loss export, last year from last year's accounts PDF, working papers or export. Adjust any line in the Adjustment column.</p></div></div>
+    <label class="check" id="plToolWrap"><input type="checkbox" id="pl-tool"> <span data-out="plToolLabel"></span></label>
+    <div class="note info" data-out="plCheck" hidden></div>
+    <div class="table-wrap"><table class="calc"><thead><tr><th></th><th class="n">From Xero</th><th class="n">Adjustment</th><th class="n" data-out="plYearNow"></th><th class="n" data-out="plYearPrior"></th></tr></thead><tbody id="plTable"></tbody></table></div>
+    <div class="row-actions"><button class="btn" type="button" id="plToTax">Use this net profit on the Tax tab</button><span class="muted small" data-out="plTaxNote"></span></div>
+  </section>
+
+  <section class="panel" id="plXeroPanel">
+    <div class="panel-head"><div><h2>Xero accounts</h2><p class="muted small" data-out="plXeroSource"></p></div></div>
+    <div class="table-wrap"><table class="items"><thead><tr><th>Xero account</th><th>Xero section</th><th class="n">Amount</th><th>Goes in</th></tr></thead><tbody id="plXeroTable"></tbody></table></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><div><h2>Accounts PDF</h2><p class="muted small">Cover, Directory, Client Approval, Accountants' and Bookkeepers' Report, and Profit and Loss.</p></div></div>
+    <div class="fields">
+      <label class="field field-wide"><span>Client's address</span><input id="ac-address" data-bind="client.address" placeholder="e.g. 74 Gideon Road, London, SW11 5UT"></label>
+      <label class="field"><span>Client approval date</span><input id="ac-approve" type="date" data-bind="accounts.approvalDate"><span class="hint">Blank uses today</span></label>
+      <label class="field"><span>Report date</span><input id="ac-report" type="date" data-bind="accounts.reportDate"><span class="hint">Blank uses today</span></label>
+    </div>
+    <details>
+      <summary class="small" style="cursor:pointer;font-weight:600;">Firm details</summary>
+      <div class="fields" style="margin-top:10px;">
+        <label class="field"><span>Firm name</span><input id="firm-name" data-firm="name"></label>
+        <label class="field"><span>Signed by</span><input id="firm-sign" data-firm="signatory"></label>
+        <label class="field field-wide"><span>Proprietors</span><input id="firm-prop" data-firm="proprietors"></label>
+        <label class="field"><span>Address line 1</span><input id="firm-a1" data-firm="address1"></label>
+        <label class="field"><span>Address line 2</span><input id="firm-a2" data-firm="address2"></label>
+      </div>
+      <p class="hint muted small">Saved in this browser for every client.</p>
+    </details>
+    <div class="row-actions">
+      <button class="btn primary" type="button" id="accPdfBtn">↓ Download accounts PDF</button>
+      <button class="btn" type="button" id="accPreviewBtn">Preview</button>
+      <span class="muted small" data-out="accPdfName"></span>
+    </div>
+    <iframe id="accPreview" title="Accounts preview" hidden style="width:100%;height:760px;border:1px solid var(--rule);border-radius:4px;background:var(--paper);"></iframe>
   </section>
   </div>
 </div>
@@ -574,7 +621,7 @@ const blankItems = () => Object.fromEntries(TAX_SECTIONS.map(s => [s.key, []]));
 function blankState() {
   return {
     v: 2,
-    client: { name: '', taxYear: '2025/26', start: '2025-04-06', end: '2026-04-05', basis: 'Cash basis' },
+    client: { name: '', taxYear: '2025/26', start: '2025-04-06', end: '2026-04-05', basis: 'Cash basis', address: '' },
     imp: { uohCode: '', inPeriodOnly: true, log: [] },
     profit: { turnover: '', otherIncome: '', expenses: '', netOverride: '', adjustments: '', prior: {} },
     journal: { uohCode: '300', caCode: '315', clearCode: '990', date: '', taxRate: 'No VAT', includeUoh: true, includeCa: true },
@@ -587,6 +634,7 @@ function blankState() {
     tax: { items: blankItems(), propAllowance: false, slPlan: 'None', slPaye: '', cb: false, children: '1', cbWeeks: '52', poaPaid: '', notes: '', prior: { notes: '' } },
     trash: [],
     email: { firstName: '', to: '', replyBy: '', includePrior: true, subject: '', text: '', edited: false, off: {} },
+    accounts: { xero: [], xeroFile: '', xeroNet: null, map: {}, adj: {}, addTool: null, prior: {}, priorSource: '', approvalDate: '', reportDate: '' },
   };
 }
 let S; // loaded at start-up, once every helper below exists
@@ -1288,6 +1336,7 @@ function refresh() {
     ? `<tr class="group"><td colspan="5">${esc(entry)}</td></tr>`
     : `<tr><td class="box">${esc(page)}</td><td class="box">${esc(box)}</td><td>${esc(entry)}</td><td class="n">${cell(now)}</td><td class="n muted">${cell(prior)}</td></tr>`).join('');
 
+  renderAccounts(C);
   out('exportName', esc(exportFileName()));
   const J = journalLines(C);
   $('#journalTable').innerHTML = J.journals.map(j => `<tr class="group"><td colspan="5">${esc(j.narration)}</td></tr>` +
@@ -1485,6 +1534,320 @@ async function copyText(text, el, what) {
 $('#emCopy').onclick = () => copyText(S.email.text, $('#em-body'), 'email');
 $('#emCopySubject').onclick = () => copyText(S.email.subject, $('#em-subject'), 'subject');
 
+// ── Accounts: Profit and Loss and the accounts PDF ─────────────────────────
+// The firm's Profit and Loss lines, in the order the accounts print them.
+const PL_LINES = [
+  { key: 'revenue', label: 'Revenue', group: 'sales' },
+  { key: 'direct', label: 'Direct Costs', group: 'cos' },
+  ...[['accountancy', 'Accountancy and Bookkeeping'], ['advertising', 'Advertising and Marketing'], ['bank', 'Bank Charges'], ['insurance', 'Business Insurance'],
+    ['capex', 'Capital Expenditure'], ['computer', 'Computer Expenses'], ['contractor', 'Contractor/Secretarial Assistance'], ['courses', 'Courses and Conferences'],
+    ['laundry', 'Laundry and Protecting Work Clothing'], ['motor', 'Motor Expenses'], ['printing', 'Printing, Postage and Stationery'], ['subscriptions', 'Subscriptions'],
+    ['sundry', 'Sundry Expenses'], ['telephone', 'Telephone and Internet'], ['travel', 'Traveling Expenses'], ['uoh', 'Use of Home']].map(([key, label]) => ({ key, label, group: 'exp' })),
+];
+const normLabel = t => String(t || '').toLowerCase().replace(/travelling/g, 'traveling').replace(/protective/g, 'protecting').replace(/[^a-z/]+/g, ' ').trim();
+const plKeyOf = label => { const n = normLabel(label); const l = n && PL_LINES.find(x => normLabel(x.label) === n); return l ? l.key : null; };
+// Where a Xero expense account goes, from its name.
+const PL_GUESS = [
+  [/use of home|home office|working from home/i, 'uoh'], [/accountan|bookkeep|legal|professional fee/i, 'accountancy'], [/advertis|marketing|promotion/i, 'advertising'],
+  [/bank|interest|merchant|stripe|paypal|sumup/i, 'bank'], [/insurance/i, 'insurance'], [/capital|equipment|depreciation|tools/i, 'capex'],
+  [/computer|software|it\b|hosting|website/i, 'computer'], [/contract|subcontract|secretar|wages|salar|staff/i, 'contractor'], [/course|training|conference|seminar|cpd/i, 'courses'],
+  [/laundry|clothing|uniform|workwear/i, 'laundry'], [/motor|vehicle|fuel|petrol|diesel|car\b|van\b|mileage/i, 'motor'],
+  [/print|postage|stationery|office|courier|freight/i, 'printing'], [/subscription|membership|dues|licen/i, 'subscriptions'],
+  [/telephone|phone|mobile|internet|broadband/i, 'telephone'], [/travel|train|taxi|parking|subsistence|hotel|accommodation|flight/i, 'travel'],
+];
+function plGuess(line) {
+  if (line.type === 'sales') return 'revenue';
+  if (line.type === 'cos') return 'direct';
+  const g = PL_GUESS.find(([re]) => re.test(line.name));
+  return g ? g[1] : 'sundry';
+}
+const plKeyFor = (st, line) => (st.accounts.map && st.accounts.map[line.name]) || plGuess(line);
+
+function plFigures(st = S, C = compute(st)) {
+  const A = st.accounts || {};
+  const xeroUoh = (A.xero || []).filter(l => plKeyFor(st, l) === 'uoh').reduce((a, l) => a + l.amount, 0);
+  // Add the tool's own figures unless Xero already has the journals in it.
+  const addTool = A.addTool != null ? A.addTool : !r2(xeroUoh);
+  const rows = {};
+  PL_LINES.forEach(l => {
+    const xero = r2((A.xero || []).filter(x => plKeyFor(st, x) === l.key).reduce((a, x) => a + x.amount, 0));
+    const tool = addTool ? (l.key === 'uoh' ? C.uoh.figure : l.key === 'capex' ? C.ca.figure : 0) : 0;
+    const adj = num((A.adj || {})[l.key]);
+    const value = r2(xero + adj + tool);
+    const prior = A.prior && A.prior[l.key] != null ? A.prior[l.key] : null;
+    rows[l.key] = { ...l, xero, tool, adj, value, shown: Math.round(value), prior };
+  });
+  const sum = (g, f) => PL_LINES.filter(l => l.group === g).reduce((a, l) => a + (f(rows[l.key]) || 0), 0);
+  const anyPrior = PL_LINES.some(l => rows[l.key].prior != null);
+  const tot = f => { const sales = sum('sales', f), cos = sum('cos', f), exp = sum('exp', f); return { sales, cos, gross: sales - cos, exp, net: sales - cos - exp }; };
+  return { rows, addTool, xeroUoh: r2(xeroUoh), now: tot(r => r.shown), exact: tot(r => r.value), prior: anyPrior ? tot(r => r.prior) : null };
+}
+function plYears() { const e = dayOf(S.client.end); const y = e ? e.getFullYear() : yearEnd(S.client.taxYear); return { now: String(y), prior: String(y - 1) }; }
+// The printed layout: headings, lines, totals.
+function plSections(F) {
+  const out = [], P = F.prior;
+  const line = k => ({ kind: 'line', label: F.rows[k].label, now: F.rows[k].shown, prior: F.rows[k].prior });
+  out.push({ kind: 'head', label: 'Sales' }, line('revenue'), { kind: 'total', label: 'Total Sales', now: F.now.sales, prior: P && P.sales }, { kind: 'gap' });
+  out.push({ kind: 'head', label: 'Cost of Sales' }, line('direct'), { kind: 'total', label: 'Total Cost of Sales', now: F.now.cos, prior: P && P.cos }, { kind: 'gap' });
+  out.push({ kind: 'key', label: 'Gross Profit', now: F.now.gross, prior: P && P.gross }, { kind: 'gap' });
+  out.push({ kind: 'head', label: 'Expenses' }, ...PL_LINES.filter(l => l.group === 'exp').map(l => line(l.key)), { kind: 'gap' });
+  out.push({ kind: 'total', label: 'Total Expenses', now: F.now.exp, prior: P && P.exp }, { kind: 'gap' });
+  out.push({ kind: 'key', label: 'Net Profit (Loss)', now: F.now.net, prior: P && P.net });
+  return out;
+}
+
+function renderAccounts(C) {
+  const F = plFigures(S, C), A = S.accounts, yrs = plYears();
+  out('plYearNow', yrs.now); out('plYearPrior', yrs.prior);
+  $('#pl-tool').checked = F.addTool;
+  out('plToolLabel', `Add this tool's Use of Home (${fmt(C.uoh.figure)}) and capital allowances (${fmt(C.ca.figure)}). Tick this if the journals aren't in Xero yet.`);
+  const w = v => (v ? fmt0(v) : '–');
+  const pr = v => (v == null ? '<span class="muted">–</span>' : w(v));
+  // Built once, so typing in an adjustment keeps its place; figures update below.
+  const secs = plSections(F);
+  const tbl = $('#plTable');
+  if (!tbl.dataset.built) {
+    tbl.innerHTML = secs.map((r, i) => {
+      if (r.kind === 'gap') return '';
+      if (r.kind === 'head') return `<tr class="group"><td colspan="5">${esc(r.label)}</td></tr>`;
+      if (r.kind !== 'line') return `<tr class="${r.kind === 'key' ? 'key' : 'total'}"><td>${esc(r.label)}</td><td></td><td></td><td class="n" data-out="pl-tn-${i}"></td><td class="n" data-out="pl-tp-${i}"></td></tr>`;
+      const k = PL_LINES.find(l => l.label === r.label).key;
+      return `<tr><td>${esc(r.label)}<div class="small muted" data-out="pl-t-${k}"></div></td><td class="n" data-out="pl-x-${k}"></td>
+        <td class="n"><input class="num" id="pl-adj-${k}" data-bind="accounts.adj.${k}" inputmode="decimal" style="width:110px;" aria-label="Adjustment for ${esc(r.label)}"></td>
+        <td class="n" data-out="pl-n-${k}"></td><td class="n" data-out="pl-p-${k}"></td></tr>`;
+    }).join('');
+    tbl.dataset.built = '1';
+  }
+  secs.forEach((r, i) => {
+    if (r.kind === 'gap' || r.kind === 'head') return;
+    if (r.kind !== 'line') { out(`pl-tn-${i}`, w(r.now)); out(`pl-tp-${i}`, pr(r.prior)); return; }
+    const row = F.rows[PL_LINES.find(l => l.label === r.label).key], k = row.key;
+    out(`pl-t-${k}`, row.tool ? `incl. ${fmt(row.tool)} from this tool` : '');
+    out(`pl-x-${k}`, row.xero ? fmt(row.xero) : '<span class="muted">–</span>');
+    out(`pl-n-${k}`, w(r.now)); out(`pl-p-${k}`, pr(r.prior));
+  });
+  PL_LINES.forEach(l => { const el = document.getElementById('pl-adj-' + l.key); if (el && document.activeElement !== el) el.value = (A.adj || {})[l.key] ?? ''; });
+  const chk = $('[data-out="plCheck"]');
+  chk.hidden = A.xeroNet == null;
+  if (A.xeroNet != null) chk.innerHTML = `Xero's net profit is ${fmt(A.xeroNet)}. ${F.addTool ? `With this tool's Use of Home and capital allowances, it's ${fmt(F.exact.net)}.` : `The accounts above show ${fmt(F.exact.net)}.`}`;
+  out('plTaxNote', `Sets the Tax tab's net profit to ${fmt(r2(F.exact.net + C.ca.figure))}: this net profit with the capital allowances added back, since the Tax tab deducts them itself.`);
+  // Xero accounts and where each goes
+  $('#plXeroPanel').hidden = !(A.xero || []).length;
+  out('plXeroSource', A.xeroFile ? `From ${esc(A.xeroFile)}. Change "Goes in" for any account; it's remembered for this client.` : '');
+  const sig = JSON.stringify([A.xeroFile, (A.xero || []).length, A.map]);
+  if ($('#plXeroTable').dataset.sig !== sig) $('#plXeroTable').dataset.sig = sig, $('#plXeroTable').innerHTML = (A.xero || []).map((x, i) => `<tr><td>${esc(x.name)}</td><td class="muted small">${esc(x.section || '')}</td><td class="n">${fmt(x.amount)}</td>
+    <td><select id="plmap-${i}" data-plmap="${esc(x.name)}" aria-label="Goes in">${PL_LINES.map(l => `<option value="${l.key}"${plKeyFor(S, x) === l.key ? ' selected' : ''}>${esc(l.label)}</option>`).join('')}</select></td></tr>`).join('');
+  out('accPdfName', esc(accountsFileName()));
+  firmFields();
+}
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'pl-tool') { S.accounts.addTool = t.checked; refresh(); }
+  if (t.dataset && t.dataset.plmap) { S.accounts.map = { ...(S.accounts.map || {}), [t.dataset.plmap]: t.value }; refresh(); }
+});
+$('#plToTax').onclick = () => {
+  const C = compute(), F = plFigures(S, C);
+  S.profit.netOverride = String(r2(F.exact.net + C.ca.figure));
+  S.profit.turnover = String(r2(F.exact.sales));
+  renderLists(); refresh();
+  toast(`Tax tab net profit set to ${fmt(r2(F.exact.net + C.ca.figure))}.`);
+};
+
+// Xero's Profit and Loss report: account rows under section headings.
+function isXeroPL(rows) {
+  const top = rows.slice(0, 8).map(r => String(r[0] || '').trim().toLowerCase());
+  return top.includes('profit and loss') || (rows.some(r => /^net profit$/i.test(String(r[0] || '').trim())) && !rows.some(r => r.some(c => /^date$/i.test(String(c).trim()))));
+}
+const amountOf = c => { const t = String(c ?? '').trim(); return /^-?\(?£?-?[\d,]+(\.\d+)?\)?$/.test(t) ? num(t) : null; };
+function importXeroPL(name, rows) {
+  const lines = []; let section = '', type = 'exp', xeroNet = null;
+  rows.forEach(r => {
+    const label = String(r[0] ?? '').trim();
+    if (!label) return;
+    const amt = r.slice(1).map(amountOf).find(v => v != null);
+    if (amt == null) {
+      if (/^(profit and loss|account)$/i.test(label) || /for the (year|period)|^\d/.test(label.toLowerCase())) return;
+      section = label;
+      type = /cost of sales|direct cost|purchases/i.test(label) ? 'cos' : /income|revenue|sales|turnover/i.test(label) && !/expense/i.test(label) ? 'sales' : 'exp';
+      return;
+    }
+    if (/^net profit|^net loss/i.test(label)) { xeroNet = amt; return; }
+    if (/^total\b|^gross profit|^operating profit|^net operating/i.test(label)) return;
+    lines.push({ name: label.replace(/^\d+\s*[-–]\s*/, '').trim(), section, type, amount: r2(amt) });
+  });
+  if (!lines.length) { logMsg('warn', `${name}: no accounts found in this Profit and Loss report.`); return; }
+  S.accounts.xero = lines; S.accounts.xeroFile = name; S.accounts.xeroNet = xeroNet; S.accounts.addTool = null;
+  logMsg('ok', `${name}: Xero Profit and Loss with ${lines.length} accounts${xeroNet != null ? `, net profit ${fmt(xeroNet)}` : ''}. See the Accounts tab.`);
+  toast('Xero Profit and Loss loaded.');
+}
+
+// Last year's accounts PDF: the Profit and Loss lines and the Directory.
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    if (document.querySelector(`script[data-src="${src}"]`)) return res();
+    const el = document.createElement('script'); el.src = src; el.dataset.src = src;
+    el.onload = () => res(); el.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(el);
+  });
+}
+async function pdfLines(buf) {
+  await loadScript('vendor/pdfjs-3.11.174/pdf.min.js');
+  const lib = window.pdfjsLib;
+  lib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs-3.11.174/pdf.worker.min.js';
+  const doc = await lib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise;
+  const pages = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const tc = await (await doc.getPage(n)).getTextContent();
+    const rows = new Map();
+    tc.items.forEach(it => {
+      if (!it.str || !it.str.trim()) return;
+      const y = Math.round(it.transform[5]);
+      const key = [...rows.keys()].find(k => Math.abs(k - y) <= 2) ?? y;
+      (rows.get(key) || rows.set(key, []).get(key)).push({ x: it.transform[4], s: it.str });
+    });
+    pages.push([...rows.entries()].sort((a, b) => b[0] - a[0]).map(([, its]) => its.sort((a, b) => a.x - b.x).map(i => i.s.trim()).join(' ').replace(/\s+/g, ' ').trim()));
+  }
+  return pages;
+}
+async function importAccountsPdf(name, buf) {
+  const pages = await pdfLines(buf);
+  const all = pages.flat();
+  const plPage = pages.find(p => p.some(l => /^profit and loss/i.test(l)) && p.some(l => /net profit/i.test(l)));
+  if (!plPage) { logMsg('warn', `${name}: no Profit and Loss page found in this PDF.`); return; }
+  const prior = {};
+  plPage.forEach(l => {
+    const m = l.match(/^(.*?[A-Za-z)])\s+((?:\(?-?[\d,]+\)?|-)(?:\s+(?:\(?-?[\d,]+\)?|-))*)$/);
+    if (!m) return;
+    const key = plKeyOf(m[1]);
+    if (!key) return;
+    const first = m[2].split(/\s+/)[0];
+    prior[key] = first === '-' ? 0 : (/^\(/.test(first) ? -1 : 1) * num(first.replace(/[()]/g, ''));
+  });
+  const yeLine = all.find(l => /for the year ended/i.test(l)) || '';
+  const ye = yeLine.match(/ended\s+(\d{1,2} \w+ \d{4})/i);
+  const coverIdx = all.findIndex(l => /unaudited financial statements/i.test(l));
+  const client = coverIdx >= 0 ? (all.slice(coverIdx + 1).find(l => l && !/for the year/i.test(l)) || '').trim() : '';
+  const dirPage = pages.find(p => p.some(l => /^directory$/i.test(l)));
+  let address = '';
+  if (dirPage) { const i = dirPage.findIndex(l => /^address$/i.test(l)); if (i >= 0) address = dirPage.slice(i + 1).filter(l => l && !/accountants/i.test(l)).slice(0, 1).join(''); }
+  if (!S.client.name && client) {
+    // Nothing loaded yet: set this client up for the year after these accounts.
+    S.client.name = client;
+    const d = ye ? new Date(ye[1]) : null;
+    if (d && !isNaN(d)) {
+      const s = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1), e = new Date(d.getFullYear() + 1, d.getMonth(), d.getDate());
+      S.client.start = ymd(s); S.client.end = ymd(e); S.client.taxYear = taxYearOfEnd(e);
+    }
+  }
+  if (address && !has(S.client.address)) S.client.address = address;
+  S.accounts.prior = prior; S.accounts.priorSource = name;
+  logMsg('ok', `${name}: last year's Profit and Loss read (${Object.keys(prior).length} lines${ye ? `, year ended ${ye[1]}` : ''})${address ? `, address ${address}` : ''}.`);
+  toast("Last year's accounts read.");
+}
+
+// The accounts PDF, laid out like the firm's working papers print.
+const FIRM_KEY = 'yearEnd:firm';
+const FIRM_DEFAULT = { name: 'Reliable Client Solutions', signatory: 'Stephen Queah', proprietors: 'Proprietor: Mr Stephen Queah, Mrs Ruth Queah', address1: '8 St Johns Court, St Johns Road', address2: 'Harrow, HA1 2EQ, United Kingdom' };
+function firm() { try { return { ...FIRM_DEFAULT, ...JSON.parse(localStorage.getItem(FIRM_KEY) || '{}') }; } catch (_) { return { ...FIRM_DEFAULT }; } }
+function firmFields() { const f = firm(); $$('[data-firm]').forEach(el => { if (document.activeElement !== el) el.value = f[el.dataset.firm] || ''; }); }
+document.addEventListener('input', e => {
+  const k = e.target.dataset && e.target.dataset.firm;
+  if (!k) return;
+  const f = firm(); f[k] = e.target.value;
+  try { localStorage.setItem(FIRM_KEY, JSON.stringify(f)); } catch (_) {}
+});
+function accountsFileName() {
+  const parts = String(S.client.name || 'Client').trim().split(/\s+/);
+  const nm = parts.length > 1 ? `${parts[0][0]}_${parts.slice(1).join('_')}` : parts[0];
+  return `${nm.replace(/[^\w-]/g, '')}_Final_Accounts_${plYears().now}.pdf`;
+}
+async function buildAccountsPdf() {
+  await loadScript('vendor/jspdf-2.5.1.umd.min.js');
+  await loadScript('firm-logo.js');
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const F = plFigures(S), f = firm(), name = S.client.name || 'Client', end = longDate(S.client.end), yrs = plYears();
+  const today = longDate(ymd(new Date()));
+  const approve = has(S.accounts.approvalDate) ? longDate(S.accounts.approvalDate) : today;
+  const report = has(S.accounts.reportDate) ? longDate(S.accounts.reportDate) : today;
+  const L = 53, W = 487;
+  const t = (str, x, y, size, bold, opts = {}) => { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.text(String(str), x, y, { baseline: 'top', ...opts }); };
+  const para = (str, y, size, gap) => { doc.setFont('helvetica', 'normal'); doc.setFontSize(size); const lines = doc.splitTextToSize(str, W); doc.text(lines, L, y, { baseline: 'top', lineHeightFactor: 1.27 }); return y + lines.length * size * 1.27 + (gap || 0); };
+  const page = (first) => { if (!first) doc.addPage(); doc.addImage(window.FIRM_LOGO, 'JPEG', 350, 43, 86, 57); };
+  const heading = (title, plain) => { t(title, L, 133, 13.5, true); t(name, L, 156, 11.5, true); t(`For the year ended ${end}`, L, 176, 11.5, !plain); };
+  const firmBlock = (y, size) => [f.name, f.proprietors, f.address1, f.address2].filter(Boolean).forEach((x, i) => t(x, L, y + i * size * 1.33, size, i === 0));
+
+  // Cover
+  page(true);
+  t('Unaudited Financial Statements', 55, 177, 21, true);
+  t(name, L, 236, 11.5, true);
+  t(`For the year ended ${end}`, L, 273, 11.5, true);
+  t(`Prepared by ${String(f.name).toUpperCase()}`, L, 298, 8.7, false);
+
+  // Directory
+  page();
+  heading('Directory');
+  t('Address', L, 204, 9.6, true);
+  t(S.client.address || '', L, 217, 8.7, false);
+  t('Accountants and Bookkeepers', L, 249, 9.6, true);
+  firmBlock(279, 8.7);
+
+  // Client approval
+  page();
+  heading('Client Approval');
+  let y = para(`In accordance with the engagement letter, I approve the financial information which comprises the Profit and Loss account and the related notes. I acknowledge my responsibility for the financial information, including the appropriateness of the applicable financial reporting framework as set out in the notes, and for providing ${f.name} with all information and explanations necessary for their compilation.`, 205, 9.6, 12);
+  t('.................................................', L, y, 8.7); t(name, L, y + 12, 8.7); t(approve, L, y + 24, 8.7);
+
+  // Accountants' report
+  page();
+  heading("Accountants' and Bookkeepers' Report");
+  y = 215;
+  [
+    `In accordance with our terms of engagement, we have prepared for your approval the financial information of ${name} for the period ended ${end} from the entity's accounting records and from information and explanations you have given us.`,
+    'As a practising member of the Institute of Certified Bookkeepers (“ICB”), we are subject to its ethical and other professional requirements which are detailed at https://www.bookkeepers.org.uk/Membership/Ethics--Regulations/Professional-Conduct-Regulations.',
+    `This report is made solely to you, in accordance with the terms of our engagement. Our work has been undertaken solely to prepare for your approval the financial information of ${name} and state those matters that we have agreed to state to you in this report. To the fullest extent permitted by law, we do not accept or assume responsibility to anyone other than you for our work or for this report.`,
+    `You have approved the financial information for the period ended ${end} and have acknowledged your responsibility for it, for the appropriateness of the financial reporting framework adopted and for providing all information and explanations necessary for its compilation.`,
+    'We have not verified the accuracy or completeness of the accounting records or information and explanations you have given to us and we do not, therefore, express any opinion on the financial accounts.',
+  ].forEach(p => { y = para(p, y, 8.7, 1.5); });
+  y = Math.max(y + 55, 438);
+  t('Signature.........................................', L, y, 8.7);
+  y += 27; t(f.signatory, L, y, 8.7, true);
+  firmBlock(y + 11.6, 8.7);
+  t(report, L, y + 58, 8.7);
+
+  // Profit and Loss
+  page();
+  heading('Profit and Loss', true);
+  const xNow = 438, xPrior = 498, step = 11.16;
+  const n = v => (v == null ? '' : !Math.round(v) ? '-' : v < 0 ? `(${Math.abs(Math.round(v)).toLocaleString('en-GB')})` : Math.round(v).toLocaleString('en-GB'));
+  t('Notes', 357, 202, 9.6, true); t(yrs.now, xNow, 202, 9.6, true, { align: 'right' }); t(yrs.prior, xPrior, 202, 9.6, true, { align: 'right' });
+  doc.setLineWidth(0.6); doc.line(L, 214, 540, 214);
+  y = 225;
+  plSections(F).forEach(r => {
+    if (r.kind === 'gap') { y += step; return; }
+    if (r.kind === 'head') { t(r.label, L, y, 9.6, true); doc.setLineWidth(0.4); doc.line(L, y + 11.2, 540, y + 11.2); y += step + 1.5; return; }
+    const bold = r.kind !== 'line';
+    const x = r.kind === 'line' || r.kind === 'key' ? 60 : L;
+    if (r.kind === 'key') { doc.setLineWidth(0.6); doc.line(L, y - 2, 540, y - 2); }
+    t(r.label, x, y, 8.7, bold);
+    t(n(r.now), xNow, y, 8.7, bold, { align: 'right' });
+    t(r.prior == null ? '-' : n(r.prior), xPrior, y, 8.7, bold, { align: 'right' });
+    if (r.kind === 'line') { doc.setDrawColor(215); doc.setLineWidth(0.3); doc.line(60, y + 10.4, 540, y + 10.4); doc.setDrawColor(0); }
+    y += step;
+  });
+  return doc;
+}
+$('#accPdfBtn').onclick = async () => {
+  try { const doc = await buildAccountsPdf(); doc.save(accountsFileName()); toast('Downloaded ' + accountsFileName()); }
+  catch (e) { console.error(e); toast('Could not make the PDF: ' + e.message); }
+};
+$('#accPreviewBtn').onclick = async () => {
+  try {
+    const doc = await buildAccountsPdf(); const fr = $('#accPreview');
+    if (fr.dataset.url) URL.revokeObjectURL(fr.dataset.url);
+    fr.dataset.url = URL.createObjectURL(doc.output('blob')); fr.src = fr.dataset.url; fr.hidden = false;
+  } catch (e) { console.error(e); toast('Could not make the PDF: ' + e.message); }
+};
+
 // ── Rates editor ───────────────────────────────────────────────────────────
 function renderRates() {
   const year = S.client.taxYear;
@@ -1574,10 +1937,11 @@ document.addEventListener('drop', e => { if (!drop.contains(e.target)) { e.preve
 
 async function handleFiles(files) {
   // Workbooks first (they set up last year), then backups (account code), then CSVs.
-  const order = f => /\.xls/i.test(f.name) ? 0 : /\.json$/i.test(f.name) ? 1 : 2;
+  const order = f => /\.xls/i.test(f.name) ? 0 : /\.pdf$/i.test(f.name) ? 1 : /\.json$/i.test(f.name) ? 2 : 3;
   for (const f of files.sort((a, b) => order(a) - order(b))) {
     try {
       if (/\.json$/i.test(f.name)) importBackup(f.name, JSON.parse(await f.text()));
+      else if (/\.pdf$/i.test(f.name)) await importAccountsPdf(f.name, await f.arrayBuffer());
       else if (/\.csv$/i.test(f.name)) importCsv(f.name, await f.text());
       else {
         const wb = XLSX.read(await f.arrayBuffer());
@@ -1786,6 +2150,25 @@ function importWorkingPapers(name, wb) {
     notes.push(['ok', `Tax: ${count} line${count !== 1 ? 's' : ''} brought forward with last year's figures.`]);
   }
 
+  // Last year's Profit and Loss sheet and the Directory address.
+  const plWs = sheet('Profit and Loss');
+  if (plWs) {
+    const pl = wsHelpers(plWs), prior = {};
+    for (let r = 1; r <= pl.last; r++) {
+      const label = pl.v('B' + r) ?? pl.v('A' + r), v = pl.v('D' + r);
+      const key = plKeyOf(label);
+      if (key && isNum(v)) prior[key] = r2(v);
+    }
+    if (Object.keys(prior).length) { fresh.accounts.prior = prior; fresh.accounts.priorSource = `${name}, Profit and Loss sheet`; }
+  }
+  const dir = wsHelpers(sheet('Directory'));
+  const addrRow = dir.find('A', /^address$/i);
+  if (addrRow) {
+    const parts = [];
+    for (let r = addrRow + 1; r <= dir.last; r++) { const x = dir.v('A' + r); if (x == null || String(x).trim() === '') { if (parts.length) break; continue; } if (/accountants/i.test(x)) break; parts.push(String(x).trim()); }
+    if (parts.length) fresh.client.address = parts.join(', ');
+  }
+
   // Profit comparatives from the TB.
   if (tb.last > 0) {
     const pp = fresh.profit.prior;
@@ -1865,6 +2248,10 @@ function rollForward(last) {
   Object.assign(n.tax, { propAllowance: last.tax.propAllowance, slPlan: last.tax.slPlan, cb: last.tax.cb, children: last.tax.children, cbWeeks: last.tax.cbWeeks });
   n.tax.prior = { slPlan: last.tax.slPlan, cb: last.tax.cb ? 'Yes' : 'No', notes: last.tax.notes };
   n.tax.poaPaid = C.tax.poa ? String(r2(C.tax.poa * 2)) : '';
+  const lastPl = plFigures(last, C);
+  n.accounts.prior = Object.fromEntries(PL_LINES.map(l => [l.key, lastPl.rows[l.key].shown]));
+  n.accounts.priorSource = `${last.client.taxYear} workings`;
+  n.accounts.map = { ...(last.accounts && last.accounts.map) };
   n.profit.prior = { turnover: num(last.profit.turnover), otherIncome: num(last.profit.otherIncome), expenses: num(last.profit.expenses), uoh: C.uoh.figure, net: C.net, ca: C.ca.figure, adjustments: num(last.profit.adjustments), taxable: C.taxable };
   return n;
 }
@@ -1901,6 +2288,7 @@ const isUohName = n => /use of home|home as (an )?office|home office|working fro
 
 function importCsv(name, text) {
   const rows = parseCsv(text.replace(/^﻿/, ''));
+  if (isXeroPL(rows)) return importXeroPL(name, rows);
   const hi = rows.findIndex(r => r.some(c => normH(c) === 'date' || normH(c) === 'invoicedate'));
   if (hi < 0) { logMsg('warn', `${name}: not a file this tool recognises.`); return; }
   const head = rows[hi].map(normH);
@@ -2271,6 +2659,10 @@ $('#exportBtn').onclick = () => {
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, sheetFrom(summary.aoa, [52, 15, 15, 58]), 'Summary');
+  { const PLF = plFigures(S, C), yrs = plYears();
+    const plSheet = [...head, ['PROFIT AND LOSS', yrs.now, yrs.prior]];
+    plSections(PLF).forEach(row => plSheet.push(row.kind === 'head' ? [row.label.toUpperCase()] : row.kind === 'gap' ? [] : [row.label, row.now, row.prior == null ? '' : row.prior]));
+    XLSX.utils.book_append_sheet(wb, sheetFrom(plSheet, [40, 14, 14]), 'Profit and Loss'); }
   XLSX.utils.book_append_sheet(wb, sheetFrom(uohSheet, [34, 60, 14, 14]), 'Use of Home');
   XLSX.utils.book_append_sheet(wb, sheetFrom(caSheet, [44, 13, 13, 13, 13, 15, 13, 11, 16]), 'CA');
   XLSX.utils.book_append_sheet(wb, sheetFrom(taxSheet, [34, 34, 12, 14, 13, 13, 50]), 'Tax');
