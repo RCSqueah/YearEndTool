@@ -371,7 +371,14 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
   </section>
 
   <section class="panel">
-    <div class="panel-head"><div><h2>Checklist</h2><p class="muted small">Post-meeting checklist from the working papers, with last year's answers.</p></div></div>
+    <div class="panel-head"><div><h2>Checklist</h2><p class="muted small" data-out="mtChecklistNote"></p></div>
+      <button class="btn" type="button" id="ckEdit">Edit questions</button></div>
+    <div id="ckEditor" hidden style="display:grid;gap:8px;">
+      <p class="muted small">One question per line. Start a line with "- " to indent it under the line above, and end a line with ":" to make it a heading with no answer. Your list is used for every client and is included in backups.</p>
+      <textarea id="ckText" rows="18" style="font-size:13px;line-height:1.55;"></textarea>
+      <div class="row-actions"><button class="btn primary" type="button" id="ckSave">Save questions</button><button class="btn" type="button" id="ckCancel">Cancel</button>
+        <button class="btn link danger" type="button" id="ckReset">Go back to the standard list</button></div>
+    </div>
     <div class="table-wrap"><table class="items"><thead><tr><th>Question</th><th>Last year</th><th>This year</th><th>Note</th></tr></thead><tbody id="mtChecklist"></tbody></table></div>
   </section>
 
@@ -2597,7 +2604,29 @@ const MEETING_QUESTIONS = [
   'Confirm that the client does not have any foreign income that has not been disclosed?', 'Confirm that client understands all capital gains must be disclosed?',
   'Is there any anyone in chambers who might benefit from a talk/seminar?', 'Any questions from client?', 'Confirm that there are no anti-money laundering concerns',
 ];
-const meetingQuestions = (st = S) => (st.meeting.questions && st.meeting.questions.length ? st.meeting.questions : MEETING_QUESTIONS);
+// The firm's own checklist (edited on the Meeting tab) is used for every client;
+// without one, the working papers' list, or the standard list.
+const CHECKLIST_KEY = 'yearEnd:checklist';
+function firmChecklist() { try { const l = JSON.parse(lsRead(CHECKLIST_KEY) || 'null'); return Array.isArray(l) && l.length ? l : null; } catch (_) { return null; } }
+const meetingQuestions = (st = S) => firmChecklist() || (st.meeting.questions && st.meeting.questions.length ? st.meeting.questions : MEETING_QUESTIONS);
+function openChecklistEditor(open) {
+  $('#ckEditor').hidden = !open; $('#ckEdit').hidden = open;
+  if (open) { $('#ckText').value = meetingQuestions().join('\n'); $('#ckText').focus(); }
+}
+$('#ckEdit').onclick = () => openChecklistEditor(true);
+$('#ckCancel').onclick = () => openChecklistEditor(false);
+$('#ckSave').onclick = () => {
+  const list = $('#ckText').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => l.replace(/^[-–•]\s*/, '- '));
+  if (!list.length) { toast('Add at least one question, or use the standard list.'); return; }
+  lsWrite(CHECKLIST_KEY, JSON.stringify(list));
+  openChecklistEditor(false); renderLists(); refresh();
+  toast(`Saved ${list.length} questions for every client.`);
+};
+$('#ckReset').onclick = () => {
+  try { localStorage.removeItem(CHECKLIST_KEY); } catch (_) {}
+  openChecklistEditor(false); renderLists(); refresh();
+  toast('Using the standard list again.');
+};
 const MEET_TYPES = [['paid', 'Paid personally'], ['private', 'Private use'], ['income', 'Income not banked']];
 // Account code for a Profit and Loss line: from this client's imported accounts, else the usual code.
 function codeForKey(key) {
@@ -2709,6 +2738,7 @@ function renderReceived() {
 }
 function refreshMeeting() {
   const M = S.meeting, eff = meetingLineEffects();
+  out('mtChecklistNote', firmChecklist() ? "Your checklist, with last year's answers where the question is the same." : "Post-meeting checklist from the working papers, with last year's answers. Click Edit questions to make it your own.");
   eff.forEach((e, i) => out('mta-e-' + i, e ? fmt(e) : '–'));
   const total = r2(eff.reduce((a, b) => a + b, 0));
   out('mtAdjTotal', M.adj.length ? `Profit ${total >= 0 ? '+' : ''}${fmt(total)}` : '');
@@ -2939,7 +2969,7 @@ document.addEventListener('click', e => {
 $('#backupBtn').onclick = () => {
   saveNow();
   const clients = readIndex().map(e => loadRecord(e.id)).filter(Boolean);
-  const data = { app: 'year-end-tool', version: 1, savedAt: new Date().toISOString(), clients, rates: customRates, firm: JSON.parse(lsRead(FIRM_KEY) || 'null'), signature: lsRead(SIG_KEY) };
+  const data = { app: 'year-end-tool', version: 1, savedAt: new Date().toISOString(), clients, rates: customRates, firm: JSON.parse(lsRead(FIRM_KEY) || 'null'), signature: lsRead(SIG_KEY), checklist: firmChecklist() };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
   a.download = `year-end-tool-backup-${ymd(new Date())}.json`;
@@ -2959,6 +2989,7 @@ function restoreYearEndBackup(name, data) {
   Object.entries(data.rates || {}).forEach(([y, r]) => { if (!customRates[y]) customRates[y] = r; }); saveRates();
   if (data.firm && lsRead(FIRM_KEY) == null) lsWrite(FIRM_KEY, JSON.stringify(data.firm));
   if (data.signature != null && lsRead(SIG_KEY) == null) lsWrite(SIG_KEY, data.signature);
+  if (Array.isArray(data.checklist) && data.checklist.length && !firmChecklist()) lsWrite(CHECKLIST_KEY, JSON.stringify(data.checklist));
   const reloaded = loadRecord(S.id); if (reloaded) S = reloaded;
   renderAll(); renderClients();
   const msg = `${name}: ${added} client record${added !== 1 ? 's' : ''} added, ${updated} updated${kept ? `, ${kept} kept because this browser's copy is newer` : ''}.`;
