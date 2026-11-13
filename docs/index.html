@@ -2589,26 +2589,21 @@ $('#accPreviewBtn').onclick = async () => {
 // ── Meeting ────────────────────────────────────────────────────────────────
 // The post-meeting checklist from the firm's working papers.
 const MEETING_QUESTIONS = [
-  'Is there any outstanding information?', 'Any VAT queries, or is the client close to the VAT registration threshold?',
-  'Is the client aware of the specialist treatment for barristers and VAT? (i.e. 2 court suits, etc.)',
-  'Are all invoices and receipts kept? Provide a comment on the standard of record keeping', 'Is the client aware of the cash basis?',
-  'Is the client aware of the tapering of personal allowances when income exceeds £100k?',
-  'Appropriate to discuss retention of personal allowance through pension contributions?',
-  'Does the client understand how tax relief on pension contributions is obtained?',
-  'Should we remind the client about pension contributions before 5 April next year?', 'Does the client have a will?',
-  'Does the client need IHT planning?', 'Should the client consider meeting with an IFA?', 'Should we consider a SA303 application?',
-  'Is the client aware of our Tax Investigation Service?', 'Does the client make interim payments?', 'Are there any concerns regarding MTD?',
-  'Is the client aware of the long-term objectives of MTD?', 'Is the client aware of incorporation - and the advantages/disadvantages',
-  'Is it appropriate for the client to employ their spouse?', 'If client has rental property:',
-  '- Is the client aware of changes to relief on finance costs?', '- Is the client aware of changes to PPR?', '- Is the client aware of new timings of payment for CGT?',
-  'Confirm that the client does not have any foreign income that has not been disclosed?', 'Confirm that client understands all capital gains must be disclosed?',
-  'Is there any anyone in chambers who might benefit from a talk/seminar?', 'Any questions from client?', 'Confirm that there are no anti-money laundering concerns',
+  'Any other information I should know, e.g. any other income (rental property, savings interest, dividends, income from abroad, or money from selling shares, cryptoassets or a property)?',
+  'Any changes I should know about, such as a new job, moving home, getting married, having a child, or starting to pay into a pension or give to charity?',
+  'Any VAT queries, or is the client close to the VAT registration threshold?',
+  'Reminder to keep records for at least 5 years',
+  'Discuss pension contributions if net income is likely to be above £50,000 (higher rate taxpayer)',
+  'Apply to reduce payments on account',
+  'Any questions from client?',
+  'Confirm that there are no anti-money laundering concerns',
 ];
-// The firm's own checklist (edited on the Meeting tab) is used for every client;
-// without one, the working papers' list, or the standard list.
+// The firm's checklist is used for every client: as edited on the Meeting tab,
+// or the standard list above. (Older working papers' questions aren't used,
+// but last year's answers still show wherever the question is the same.)
 const CHECKLIST_KEY = 'yearEnd:checklist';
 function firmChecklist() { try { const l = JSON.parse(lsRead(CHECKLIST_KEY) || 'null'); return Array.isArray(l) && l.length ? l : null; } catch (_) { return null; } }
-const meetingQuestions = (st = S) => firmChecklist() || (st.meeting.questions && st.meeting.questions.length ? st.meeting.questions : MEETING_QUESTIONS);
+const meetingQuestions = () => firmChecklist() || MEETING_QUESTIONS;
 function openChecklistEditor(open) {
   $('#ckEditor').hidden = !open; $('#ckEdit').hidden = open;
   if (open) { $('#ckText').value = meetingQuestions().join('\n'); $('#ckText').focus(); }
@@ -2738,7 +2733,7 @@ function renderReceived() {
 }
 function refreshMeeting() {
   const M = S.meeting, eff = meetingLineEffects();
-  out('mtChecklistNote', firmChecklist() ? "Your checklist, with last year's answers where the question is the same." : "Post-meeting checklist from the working papers, with last year's answers. Click Edit questions to make it your own.");
+  out('mtChecklistNote', "Your post-meeting checklist, with last year's answers where the question is the same. Edit questions to change it for every client.");
   eff.forEach((e, i) => out('mta-e-' + i, e ? fmt(e) : '–'));
   const total = r2(eff.reduce((a, b) => a + b, 0));
   out('mtAdjTotal', M.adj.length ? `Profit ${total >= 0 ? '+' : ''}${fmt(total)}` : '');
