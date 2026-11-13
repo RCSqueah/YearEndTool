@@ -225,10 +225,10 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
 
 
   <section class="panel">
-    <div class="panel-head"><div><h2>Progress</h2><p class="muted small">Some dates fill themselves in: copying the information request, ticking off everything received on the Meeting tab, and copying the accounts email.</p></div><span class="chip" data-out="nextStep"></span></div>
+    <div class="panel-head"><div><h2>Progress</h2><p class="muted small">Some dates fill themselves in: copying the information request, the meeting date, and copying the accounts email.</p></div><span class="chip" data-out="nextStep"></span></div>
     <div class="fields">
       <label class="field"><span>Information requested</span><input type="date" id="pg-req" data-bind="progress.requested"></label>
-      <label class="field"><span>Information received</span><input type="date" id="pg-rec" data-bind="progress.received"><span class="hint" data-out="pgReceivedHint"></span></label>
+      <label class="field"><span>Information received</span><input type="date" id="pg-rec" data-bind="progress.received"></label>
       <label class="field"><span>Meeting</span><input type="date" id="pg-meet" data-bind="meeting.date"></label>
       <label class="field"><span>Accounts sent</span><input type="date" id="pg-sent" data-bind="progress.sent"></label>
       <label class="field"><span>Approved by the client</span><input type="date" id="pg-appr" data-bind="progress.approved"></label>
@@ -379,13 +379,9 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
       <div class="row-actions"><button class="btn primary" type="button" id="ckSave">Save questions</button><button class="btn" type="button" id="ckCancel">Cancel</button>
         <button class="btn link danger" type="button" id="ckReset">Go back to the standard list</button></div>
     </div>
-    <div class="table-wrap"><table class="items"><thead><tr><th>Question</th><th>Last year</th><th>This year</th><th>Note</th></tr></thead><tbody id="mtChecklist"></tbody></table></div>
+    <div class="table-wrap"><table class="items"><thead><tr><th>Question</th><th>Answer</th><th>Note</th></tr></thead><tbody id="mtChecklist"></tbody></table></div>
   </section>
 
-  <section class="panel">
-    <div class="panel-head"><div><h2>Information received</h2><p class="muted small">What the information request asked for. Tick what the client has given you.</p></div><span class="chip" data-out="mtReceived"></span></div>
-    <div class="sec-list" id="mtReceivedList"></div>
-  </section>
   </div>
 </div>
 
@@ -1413,7 +1409,6 @@ function showTab(name) {
   $$('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== name; });
   try { sessionStorage.setItem('yearEnd:tab', name); } catch (_) {}
   if (name === 'email') renderEmail();
-  if (name === 'meeting') renderReceived();
   if (name === 'clients') { saveNow(); renderClients(); }
 }
 
@@ -1430,7 +1425,7 @@ function refresh() {
   renderClientPicker();
   const st = nextStepOf({ ...S.progress, meeting: S.meeting.date });
   out('nextStep', st ? `Next: ${st}` : 'Complete');
-  const rl = receivedItems(); out('pgReceivedHint', rl.length ? `${rl.filter(r => S.meeting.received[r.key]).length} of ${rl.length} ticked on the Meeting tab` : '');
+
   $('#hdrYear').textContent = `${S.client.taxYear} · ${S.client.basis}`;
   out('yearHint', hasRates(S.client.taxYear) ? `Set from the period end. ${esc(S.client.taxYear)} rates are built in.` : `<span class="chip warn">No ${esc(S.client.taxYear)} rates yet</span> Add them under Tax rates on the Export tab.`);
 
@@ -2333,8 +2328,7 @@ async function buildAuditPdf() {
     [`Due 31 January ${T.endYear + 1}`, money(T.janTotal), ''],
   ], { bold: [3, 5] });
   {
-    const M = S.meeting, eff = meetingLineEffects(), recd = receivedItems();
-    const outstanding = recd.filter(r => !M.received[r.key]);
+    const M = S.meeting, eff = meetingLineEffects();
     const noted = meetingQuestions().filter(q => (M.answers[q] || {}).note);
     h2('Meeting summary');
     kv([['Meeting', M.date ? `${longDate(M.date)}, ${(M.how || '').toLowerCase()}` : 'Not held yet'], ['Who attended', M.attendees || '-']]);
@@ -2343,8 +2337,6 @@ async function buildAuditPdf() {
     if (M.adj.length) M.adj.forEach((a, i) => para(`- ${a.desc || 'Adjustment'}: ${(MEET_TYPES.find(t => t[0] === a.type) || [, ''])[1].toLowerCase()}, ${money(num(a.amount))} (profit ${eff[i] >= 0 ? '+' : ''}${money(eff[i])})`, 9));
     else para('None.', 9, { grey: true });
     if (M.adj.length) para(`Total effect on profit: ${money(r2(eff.reduce((a, b) => a + b, 0)))}`, 9);
-    y += 4; font(9, true); ensure(14); doc.text('Information outstanding', L, y, { baseline: 'top' }); y += 13;
-    para(outstanding.length ? outstanding.map(r => `- ${r.label}`).join('\n') : (recd.length ? 'Everything asked for has been received.' : 'Nothing was asked for.'), 9, { grey: !outstanding.length });
     if (noted.length) {
       y += 4; font(9, true); ensure(14); doc.text('Checklist points with notes', L, y, { baseline: 'top' }); y += 13;
       noted.forEach(q => { const a = M.answers[q]; para(`- ${q.replace(/^-\s*/, '')} ${answerOf(q)}: ${a.note}`, 9); });
@@ -2371,11 +2363,8 @@ async function buildAuditPdf() {
     M.adj.map(a => [ukDate(a.date) || '', a.desc || '', (PL_LINES.find(l => l.key === a.key) || {}).label || '', a.code || codeForKey(a.key) || '', (MEET_TYPES.find(t => t[0] === a.type) || [, ''])[1], money(num(a.amount)), a.type === 'paid' ? `${num(has(a.biz) ? a.biz : 100)}%` : '-']));
   if (M.adj.length) { para(`Effect on profit: ${money(r2(eff.reduce((a, b) => a + b, 0)))} (${M.adj.map((a, i) => `${a.desc || 'line ' + (i + 1)} ${money(eff[i])}`).join('; ')}).`, 8.5, { grey: true }); y += 4; }
   h2('Checklist');
-  table([['Question', 300], ['Last year', 55], ['This year', 55], ['Note', 85]],
-    meetingQuestions().map(q => { const a = M.answers[q] || {}; return [q.replace(/^-\s*/, '   - '), M.prior.answers[q] || '', answerOf(q), a.note || '']; }));
-  h2('Information received');
-  const recd = receivedItems();
-  table([['Item', 395], ['Status', 100]], recd.map(r => [r.label, M.received[r.key] ? 'Received' : 'Outstanding']));
+  table([['Question', 330], ['Answer', 55], ['Note', 110]],
+    meetingQuestions().map(q => { const a = M.answers[q] || {}; return [q.replace(/^-\s*/, '   - '), answerOf(q), a.note || '']; }));
 
   // 4. Accounts
   h1('Accounts: Profit and Loss');
@@ -2595,7 +2584,7 @@ const MEETING_QUESTIONS = [
   'Discuss pension contributions if net income is likely to be above £50,000 (higher rate taxpayer)',
   'Apply to reduce payments on account',
   'Any questions from client?',
-  'Confirm that there are no anti-money laundering concerns',
+  'Any anti-money laundering concerns?',
   'Reminder given to follow HMRC rule to keep records for at least 5 years after the 31 January filing deadline',
 ];
 // Each question's answer until it's changed: YES for the records reminder, NO for the rest.
@@ -2697,11 +2686,6 @@ function meetingEffects(st = S) {
   });
   return out;
 }
-// What the information request asks for, one line per item.
-function receivedItems() {
-  return emailSections().filter(x => !isOff(x.key)).flatMap(x => [...x.list, ...x.asks].filter(p => !isOff(`${x.key}:${p.id}`))
-    .map(p => ({ key: `${x.key}:${p.id}`, label: `${x.title}: ${p.label}` })));
-}
 function renderMeeting() {
   const M = S.meeting;
   // Adjustments
@@ -2721,22 +2705,14 @@ function renderMeeting() {
   $('#mtChecklist').innerHTML = meetingQuestions().map((q, i) => {
     const sub = /^-\s/.test(q), head = /:$/.test(q);
     return `<tr><td style="min-width:260px;${sub ? 'padding-left:24px;' : ''}">${esc(q.replace(/^-\s*/, ''))}</td>
-      <td class="muted small">${esc(M.prior.answers[q] || '')}</td>
       <td style="min-width:110px;">${head ? '' : `<select id="mtq-a-${i}" data-mtq="${i}" data-f="a" aria-label="Answer"><option value=""></option><option>YES</option><option>NO</option><option>N/A</option></select>`}</td>
       <td style="min-width:220px;">${head ? '' : `<input id="mtq-n-${i}" data-mtq="${i}" data-f="note" aria-label="Note">`}</td></tr>`;
   }).join('');
   $$('[data-mtq]').forEach(el => { const q = meetingQuestions()[+el.dataset.mtq]; el.value = el.dataset.f === 'a' ? answerOf(q) : ((M.answers[q] || {}).note || ''); });
-  renderReceived();
-}
-function renderReceived() {
-  const M = S.meeting, list = receivedItems();
-  $('#mtReceivedList').innerHTML = list.map(r => `<label class="check"><input type="checkbox" data-received="${esc(r.key)}" ${M.received[r.key] ? 'checked' : ''}> <span>${esc(r.label)}</span></label>`).join('')
-    || '<p class="muted small">Nothing to tick off: the information request is empty.</p>';
-  out('mtReceived', list.length ? `${list.filter(r => M.received[r.key]).length} of ${list.length} received` : '');
 }
 function refreshMeeting() {
   const M = S.meeting, eff = meetingLineEffects();
-  out('mtChecklistNote', "Your post-meeting checklist, with last year's answers where the question is the same. Edit questions to change it for every client.");
+  out('mtChecklistNote', 'Your post-meeting checklist. Edit questions to change it for every client.');
   eff.forEach((e, i) => out('mta-e-' + i, e ? fmt(e) : '–'));
   const total = r2(eff.reduce((a, b) => a + b, 0));
   out('mtAdjTotal', M.adj.length ? `Profit ${total >= 0 ? '+' : ''}${fmt(total)}` : '');
@@ -2759,12 +2735,6 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset && el.dataset.mtq != null && el.tagName === 'SELECT') { const q = meetingQuestions()[+el.dataset.mtq]; S.meeting.answers[q] = { ...(S.meeting.answers[q] || {}), a: el.value }; save(); }
-  if (el.dataset && el.dataset.received) {
-    S.meeting.received[el.dataset.received] = el.checked;
-    const list = receivedItems();
-    if (list.length && list.every(r => S.meeting.received[r.key]) && !has(S.progress.received)) { S.progress.received = ymd(new Date()); bindAll(); }
-    renderReceived(); refresh();
-  }
 });
 $('#mtAddAdj').onclick = () => {
   S.meeting.adj.push({ date: '', desc: '', key: 'sundry', code: '', type: 'paid', amount: '', biz: '100' });
@@ -3580,12 +3550,10 @@ function rollForward(last) {
   n.accounts.map = { ...(last.accounts && last.accounts.map) };
   n.profit.source = last.profit.source;
   n.meeting.questions = meetingQuestions(last);
-  const lastOutstanding = (() => { const keep = S; S = last; try { return receivedItems().filter(r => !last.meeting.received[r.key]).map(r => r.label); } finally { S = keep; } })();
   n.meeting.prior = {
     answers: Object.fromEntries(meetingQuestions().filter(q => answerOf(q, last)).map(q => { const v = (last.meeting.answers || {})[q] || {}; return [q, answerOf(q, last) + (v.note ? ` (${v.note})` : '')]; })),
     notes: last.meeting.notes || '', date: last.meeting.date || '', source: `${last.client.taxYear} workings`, sections: [],
     adj: (last.meeting.adj || []).filter(a => num(a.amount)).map(a => ({ desc: a.desc, type: a.type, amount: num(a.amount), key: a.key })),
-    outstanding: lastOutstanding,
   };
   n.profit.prior = { turnover: C.pf.turnover, otherIncome: C.pf.otherIncome, expenses: C.pf.expenses, uoh: C.uoh.figure, net: C.net, ca: C.ca.figure, adjustments: num(last.profit.adjustments), taxable: C.taxable };
   return n;
@@ -4046,11 +4014,8 @@ $('#exportBtn').onclick = () => {
       ['ADJUSTMENTS AGREED', 'Goes in', 'Account', 'Type', 'Amount', 'Business %', 'Effect on profit']];
     M.adj.forEach((a, i) => ms.push([`${has(a.date) ? ukDate(a.date) + ' ' : ''}${a.desc || ''}`, (PL_LINES.find(l => l.key === a.key) || {}).label || '', a.code || codeForKey(a.key) || '',
       MEET_TYPES.find(t => t[0] === a.type)[1], num(a.amount), a.type === 'paid' ? { t: 'n', v: num(has(a.biz) ? a.biz : 100) / 100, z: '0%' } : '', eff[i]]));
-    ms.push([], ['CHECKLIST', 'Last year', 'This year', 'Note']);
-    meetingQuestions().forEach(q => { const ans = M.answers[q] || {}; ms.push([q, M.prior.answers[q] || '', answerOf(q), ans.note || '']); });
-    const recd = receivedItems();
-    ms.push([], [`INFORMATION RECEIVED (${recd.filter(r => M.received[r.key]).length} of ${recd.length})`]);
-    recd.forEach(r => ms.push([r.label, M.received[r.key] ? 'Received' : 'Outstanding']));
+    ms.push([], ['CHECKLIST', 'Answer', 'Note']);
+    meetingQuestions().forEach(q => { const ans = M.answers[q] || {}; ms.push([q, answerOf(q), ans.note || '']); });
     XLSX.utils.book_append_sheet(wb, sheetFrom(ms, [48, 26, 10, 18, 12, 11, 14]), 'Meeting'); }
   { const J = journalLines(C);
     const js = [...head, ['XERO MANUAL JOURNALS', 'Date', 'Account', 'Description', 'Debit', 'Credit']];
