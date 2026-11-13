@@ -3160,7 +3160,7 @@ async function findFigures(c) {
   let data;
   try { data = JSON.parse(text); } catch (_) { throw new Error("Claude's reply couldn't be read."); }
   if (!data || !Array.isArray(data.items)) throw new Error("Claude's reply wasn't in the expected shape.");
-  return data.items.filter(it => it && AI_KINDS[it.kind]);
+  return data.items.filter(it => it && ['uoh_cost', 'uoh_setting', 'tax_income', 'adjustment', 'info'].includes(it.kind));
 }
 function askAiKey() {
   const k = prompt('Anthropic API key (starts sk-ant-). It is saved in this browser only, and the Extraction Tool uses the same one.', aiKey());
@@ -3170,100 +3170,115 @@ function askAiKey() {
 }
 $('#aiKeyBtn').onclick = askAiKey;
 
-// What each suggestion would do, and doing it.
+// Where each suggestion goes. Claude picks a place; the "Goes to" list changes it.
 const sectionOf = key => TAX_SECTIONS.find(x => x.key === key);
 const annual = it => (it.amount == null ? null : r2(it.amount * (AI_PERIODS[it.period] || 1)));
-const amountText = it => it.amount == null ? '' : it.kind === 'uoh_setting' ? String(it.amount) : `${fmt(it.amount)}${AI_PERIODS[it.period] > 1 ? ` a ${it.period} = ${fmt(annual(it))} a year` : ''}`;
-const AI_KINDS = {
-  uoh_cost: {
-    label: 'Use of Home',
-    where: it => `Use of Home: ${categoryOf(`${it.target} ${it.description}`) || it.target || it.description}`,
-    ok: it => it.amount != null,
-    apply(it, c) {
-      const cat = categoryOf(`${it.target || ''} ${it.description || ''}`) || String(it.target || it.description || 'Other').trim();
-      const expr = AI_PERIODS[it.period] > 1 ? `${it.amount}*${AI_PERIODS[it.period]}` : String(it.amount);
-      const note = `${amountText(it)}, per email ${c.date ? ukDate(ymd(new Date(c.date))) : ''}`.replace(/, per email $/, ', per client email');
-      let line = S.uoh.lines.find(l => (categoryOf(`${l.desc} ${l.note}`) || l.desc.trim()) === cat);
-      const before = line ? lineAmount(line) : null;
-      if (line) { line.expr = expr; if (!has(line.note)) line.note = note; }
-      else S.uoh.lines.push(line = { desc: cat, note, expr, prior: null, imp: {} });
-      return `Use of Home ${cat} set to ${fmt(lineAmount(line))}${before ? ` (was ${fmt(before)})` : ''}`;
-    },
-  },
-  uoh_setting: {
-    label: 'Use of Home',
-    where: it => `Use of Home: ${UOH_SETTINGS[it.target] || it.target}`,
-    ok: it => it.amount != null && UOH_SETTINGS[it.target],
-    apply(it) {
-      const v = String(it.amount), u = S.uoh;
-      if (it.target === 'totalRooms') u.totalRooms = v;
-      else if (it.target === 'workRooms') u.workRooms = v;
-      else if (it.target === 'hoursPerWeek') { u.timeMode = 'hours'; u.hours = v; }
-      else { u.timeMode = 'days'; u.days = v; }
-      return `Use of Home ${UOH_SETTINGS[it.target].toLowerCase()} set to ${v}`;
-    },
-  },
-  tax_income: {
-    label: 'Tax return',
-    where: it => `Tax: ${(sectionOf(it.target) || {}).title || it.target}`,
-    ok: it => it.amount != null && sectionOf(it.target),
-    apply(it, c) {
-      const sec = sectionOf(it.target), list = S.tax.items[sec.key];
-      const kind = (sec.kinds || []).some(k => k[0] === it.subtype) ? it.subtype : sec.kinds ? sec.kinds[0][0] : '';
-      const desc = String(it.description || '').trim();
-      const note = AI_PERIODS[it.period] > 1 ? `${amountText(it)}, per client email` : 'Per client email';
-      let item = list.find(x => !has(x.amount) && has(x.desc) && desc && (x.desc.toLowerCase().includes(desc.toLowerCase()) || desc.toLowerCase().includes(x.desc.toLowerCase())));
-      if (item) { item.amount = String(annual(it)); if (it.taxDeducted != null) item.tax = String(it.taxDeducted); if (!has(item.note)) item.note = note; }
-      else list.push(item = newItem(sec.key, { desc, kind, amount: String(annual(it)), tax: it.taxDeducted != null ? String(it.taxDeducted) : '', note }));
-      return `Tax ${sec.title}: ${desc || 'item'} ${fmt(annual(it))}`;
-    },
-  },
-  adjustment: {
-    label: 'Accounts',
-    where: it => `Meeting adjustment: ${(MEET_TYPES.find(t => t[0] === it.subtype) || [, 'Paid personally'])[1]}`,
-    ok: it => it.amount != null,
-    apply(it, c) {
-      const key = PL_LINES.some(l => l.key === it.target) ? it.target : 'sundry';
-      const type = MEET_TYPES.some(t => t[0] === it.subtype) ? it.subtype : 'paid';
-      S.meeting.adj.push({ date: c.date ? ymd(new Date(c.date)) : '', desc: `${it.description} (client email)`, key, code: '', type, amount: String(annual(it)), biz: type === 'paid' ? String(it.bizPct ?? 100) : '100' });
-      return `Meeting adjustment: ${it.description} ${fmt(annual(it))}`;
-    },
-  },
-  info: {
-    label: 'To note',
-    where: () => 'Meeting notes',
-    ok: () => true,
-    apply(it, c) {
-      const line = `- ${it.description}${c.date ? ` (email ${ukDate(ymd(new Date(c.date)))})` : ''}`;
-      S.meeting.notes = has(S.meeting.notes) ? `${S.meeting.notes.replace(/\s+$/, '')}\n${line}` : line;
-      return `Added to meeting notes: ${it.description}`;
-    },
-  },
-};
+const UOH_BILLS = () => [...new Set(UOH_CATS.map(c => c[1]))];
+const AI_EXP_LINES = () => PL_LINES.filter(l => l.group !== 'sales' && l.key !== 'uoh');
+const AI_DEST_GROUPS = () => [
+  ['Use of Home bills', [...UOH_BILLS().map(b => ['uohc:' + b, b]), ['uohc:', 'Other household bill']]],
+  ['Use of Home', Object.entries(UOH_SETTINGS).map(([k, l]) => ['uohs:' + k, l])],
+  ['Accounts: business costs', AI_EXP_LINES().map(l => ['acc:' + l.key, l.label])],
+  ['Accounts: income', [['inc:revenue', 'Income not paid into the business bank']]],
+  ['Tax return', TAX_SECTIONS.flatMap(sec => (sec.kinds || [['', '']]).map(([k, kl]) => [`tax:${sec.key}:${k}`,
+    `${sec.key === 'giftAid' ? 'Gift Aid (charity)' : sec.title}${kl ? `: ${kl.replace(/\s*\(.*\)$/, '')}` : ''}`]))],
+  ['Other', [['note', 'Meeting notes only']]],
+];
+function defaultDest(it) {
+  if (it.kind === 'uoh_cost') { const cat = categoryOf(`${it.target || ''} ${it.description || ''}`); return 'uohc:' + (cat || ''); }
+  if (it.kind === 'uoh_setting') return UOH_SETTINGS[it.target] ? 'uohs:' + it.target : 'note';
+  if (it.kind === 'tax_income') {
+    const sec = sectionOf(it.target); if (!sec) return 'note';
+    const kind = (sec.kinds || []).some(k => k[0] === it.subtype) ? it.subtype : sec.kinds ? sec.kinds[0][0] : '';
+    return `tax:${sec.key}:${kind}`;
+  }
+  if (it.kind === 'adjustment') {
+    if (it.subtype === 'income') return 'inc:revenue';
+    return 'acc:' + (AI_EXP_LINES().some(l => l.key === it.target) ? it.target : 'sundry');
+  }
+  return 'note';
+}
+const destOf = it => it.dest || defaultDest(it);
+const destShort = g => (/^Use of Home/.test(g) ? 'Use of Home' : /^Accounts/.test(g) ? 'Accounts' : /^Tax/.test(g) ? 'Tax' : '');
+const destLabel = d => { for (const [g, opts] of AI_DEST_GROUPS()) { const o = opts.find(x => x[0] === d); if (o) return destShort(g) ? `${destShort(g)}: ${o[1]}` : o[1]; } return d; };
+const isSetting = it => destOf(it).startsWith('uohs:');
+const amountText = it => it.amount == null ? '' : isSetting(it) ? String(it.amount) : `${fmt(it.amount)}${AI_PERIODS[it.period] > 1 ? ` a ${it.period} = ${fmt(annual(it))} a year` : ''}`;
+const aiOk = it => destOf(it) === 'note' || it.amount != null;
+const emailDate = c => (c.date ? ukDate(ymd(new Date(c.date))) : '');
+function applyDest(it, c) {
+  const d = destOf(it), [kind, a, b] = d.split(':');
+  const when = emailDate(c), perEmail = when ? `per email ${when}` : 'per client email';
+  if (kind === 'note') {
+    const line = `- ${it.description}${it.amount != null ? ` (${amountText(it)})` : ''}${when ? ` (email ${when})` : ''}`;
+    S.meeting.notes = has(S.meeting.notes) ? `${S.meeting.notes.replace(/\s+$/, '')}\n${line}` : line;
+    return `Added to meeting notes: ${it.description}`;
+  }
+  if (kind === 'uohc') {
+    const cat = a || String(it.description || 'Other').trim();
+    const expr = AI_PERIODS[it.period] > 1 ? `${it.amount}*${AI_PERIODS[it.period]}` : String(it.amount);
+    const note = `${amountText(it)}, ${perEmail}`;
+    let line = S.uoh.lines.find(l => (categoryOf(`${l.desc} ${l.note}`) || l.desc.trim()) === cat);
+    const before = line ? lineAmount(line) : null;
+    if (line) { line.expr = expr; if (!has(line.note)) line.note = note; }
+    else S.uoh.lines.push(line = { desc: cat, note, expr, prior: null, imp: {} });
+    return `Use of Home ${cat} set to ${fmt(lineAmount(line))}${before ? ` (was ${fmt(before)})` : ''}`;
+  }
+  if (kind === 'uohs') {
+    const v = String(it.amount), u = S.uoh;
+    if (a === 'totalRooms') u.totalRooms = v;
+    else if (a === 'workRooms') u.workRooms = v;
+    else if (a === 'hoursPerWeek') { u.timeMode = 'hours'; u.hours = v; }
+    else { u.timeMode = 'days'; u.days = v; }
+    return `Use of Home ${UOH_SETTINGS[a].toLowerCase()} set to ${v}`;
+  }
+  if (kind === 'tax') {
+    const sec = sectionOf(a), list = S.tax.items[sec.key];
+    const desc = String(it.description || '').trim();
+    const note = AI_PERIODS[it.period] > 1 ? `${amountText(it)}, ${perEmail}` : perEmail.replace(/^p/, 'P');
+    let item = list.find(x => !has(x.amount) && has(x.desc) && desc && (x.desc.toLowerCase().includes(desc.toLowerCase()) || desc.toLowerCase().includes(x.desc.toLowerCase())));
+    if (item) { item.amount = String(annual(it)); if (b) item.kind = b; if (it.taxDeducted != null) item.tax = String(it.taxDeducted); if (!has(item.note)) item.note = note; }
+    else list.push(newItem(sec.key, { desc, kind: b || '', amount: String(annual(it)), tax: it.taxDeducted != null ? String(it.taxDeducted) : '', note }));
+    return `Tax ${sec.key === 'giftAid' ? 'Gift Aid' : sec.title}: ${desc || 'item'} ${fmt(annual(it))}`;
+  }
+  // Accounts: an adjustment on the Meeting tab (goes into the accounts and the manual journal).
+  const type = kind === 'inc' ? 'income' : it.adjType === 'private' ? 'private' : 'paid';
+  S.meeting.adj.push({ date: c.date ? ymd(new Date(c.date)) : '', desc: `${it.description} (client email)`, key: a, code: '', type, amount: String(annual(it)), biz: type === 'paid' ? String(it.bizPct ?? 100) : '100' });
+  return `Accounts ${(PL_LINES.find(l => l.key === a) || {}).label || a}: ${it.description} ${fmt(annual(it))} (${(MEET_TYPES.find(t => t[0] === type) || [, ''])[1].toLowerCase()})`;
+}
 function renderFound(c) {
   if (!c.found) return '';
   if (!c.found.items.length) return '<p class="muted small">Claude found no figures in this email.</p>';
   return `<div class="table-wrap" style="margin-top:8px;"><table class="items small"><thead><tr><th>Found</th><th>Amount</th><th>Goes to</th><th></th></tr></thead><tbody>${c.found.items.map((it, i) => {
-    const K = AI_KINDS[it.kind];
+    const id = `data-c="${esc(c.id)}" data-i="${i}"`, d = destOf(it);
+    if (it.adjType == null && it.kind === 'adjustment' && it.subtype === 'private') it.adjType = 'private';
     const act = it.added ? '<span class="chip">Added</span>'
-      : K.ok(it) ? `<button class="btn" type="button" data-ai-add="${esc(c.id)}" data-i="${i}">${it.kind === 'info' ? 'Add to notes' : 'Add'}</button>`
-      : '<span class="muted">Check by hand</span>';
-    const id = `data-c="${esc(c.id)}" data-i="${i}"`;
-    const amt = it.added || it.kind === 'info' ? esc(amountText(it)) || '-'
+      : aiOk(it) ? `<button class="btn" type="button" data-ai-add="${esc(c.id)}" data-i="${i}">${d === 'note' ? 'Add to notes' : 'Add'}</button>`
+      : '<span class="muted">Enter an amount</span>';
+    const amt = it.added || d === 'note' ? esc(amountText(it)) || '-'
       : `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><input class="num" ${id} data-ai-amt inputmode="decimal" value="${it.amount == null ? '' : esc(String(it.amount))}" style="width:90px;" aria-label="Amount">${
-        it.kind === 'uoh_setting' ? '' : `<select ${id} data-ai-per aria-label="How often" style="width:auto;">${AI_PERIOD_OPTS.map(([v, l]) => `<option value="${v}" ${(it.period || 'year') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`}</div>${
-        it.kind !== 'uoh_setting' && AI_PERIODS[it.period] > 1 && it.amount != null ? `<div class="muted">= ${esc(fmt(annual(it)))} a year</div>` : ''}`;
-    return `<tr><td><b>${esc(it.description)}</b>${it.quote ? `<div class="muted">"${esc(it.quote)}"</div>` : ''}</td><td>${amt}${it.taxDeducted != null ? `<div class="muted">tax taken off ${esc(fmt(it.taxDeducted))}</div>` : ''}${it.bizPct != null ? `<div class="muted">${esc(String(it.bizPct))}% business</div>` : ''}</td><td>${esc(K.where(it))}</td><td>${act}</td></tr>`;
+        isSetting(it) ? '' : `<select ${id} data-ai-per aria-label="How often" style="width:auto;">${AI_PERIOD_OPTS.map(([v, l]) => `<option value="${v}" ${(it.period || 'year') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`}</div>${
+        !isSetting(it) && AI_PERIODS[it.period] > 1 && it.amount != null ? `<div class="muted">= ${esc(fmt(annual(it)))} a year</div>` : ''}${
+        it.taxDeducted != null ? `<div class="muted">tax taken off ${esc(fmt(it.taxDeducted))}</div>` : ''}`;
+    const where = it.added ? esc(destLabel(d))
+      : `<select ${id} data-ai-dest aria-label="Goes to" style="width:100%;max-width:300px;">${AI_DEST_GROUPS().map(([g, opts]) => `<optgroup label="${esc(g)}">${opts.map(([v, l]) => `<option value="${esc(v)}" ${v === d ? 'selected' : ''}>${esc(destShort(g) ? `${destShort(g)}: ${l}` : l)}</option>`).join('')}</optgroup>`).join('')}</select>${
+        d.startsWith('acc:') ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;"><select ${id} data-ai-type aria-label="Type" style="width:auto;"><option value="paid" ${it.adjType !== 'private' ? 'selected' : ''}>Paid personally</option><option value="private" ${it.adjType === 'private' ? 'selected' : ''}>Private use</option></select>${
+          it.adjType !== 'private' ? `<input class="num" ${id} data-ai-biz inputmode="decimal" value="${esc(String(it.bizPct ?? 100))}" style="width:60px;" aria-label="Business use %"> <span class="muted">% business</span>` : ''}</div>` : ''}`;
+    return `<tr><td><b>${esc(it.description)}</b>${it.quote ? `<div class="muted">"${esc(it.quote)}"</div>` : ''}</td><td>${amt}</td><td>${where}</td><td>${act}</td></tr>`;
   }).join('')}</tbody></table></div>
-  <p class="muted small">Read by Claude ${esc(new Date(c.found.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}. Check each figure against the email before adding it.</p>`;
+  <p class="muted small">Read by Claude ${esc(new Date(c.found.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}. Check each figure against the email, and change where it goes if needed, before adding it.</p>`;
 }
-// Correct a suggestion's amount or how often it's paid before adding it.
+// Correct a suggestion (amount, how often, where it goes) before adding it.
 document.addEventListener('change', e => {
-  const t = e.target;
-  if (!t.dataset || (!('aiAmt' in t.dataset) && !('aiPer' in t.dataset))) return;
-  const c = S.correspondence.find(x => x.id === t.dataset.c), it = c && c.found && c.found.items[+t.dataset.i];
+  const t = e.target, ds = t.dataset || {};
+  const field = ['aiAmt', 'aiPer', 'aiDest', 'aiType', 'aiBiz'].find(f => f in ds);
+  if (!field) return;
+  const c = S.correspondence.find(x => x.id === ds.c), it = c && c.found && c.found.items[+ds.i];
   if (!it || it.added) return;
-  if ('aiAmt' in t.dataset) it.amount = has(t.value) ? num(t.value) : null; else it.period = t.value;
+  if (field === 'aiAmt') it.amount = has(t.value) ? num(t.value) : null;
+  else if (field === 'aiPer') it.period = t.value;
+  else if (field === 'aiDest') it.dest = t.value;
+  else if (field === 'aiType') it.adjType = t.value;
+  else it.bizPct = has(t.value) ? num(t.value) : null;
   // Redraw after this event: a change fired by the box losing focus mid-redraw can't redraw again.
   setTimeout(() => { renderCorrespondence(); refresh(); }, 0);
 });
@@ -3287,7 +3302,7 @@ document.addEventListener('click', async e => {
   if (add) {
     const c = S.correspondence.find(x => x.id === add.dataset.aiAdd), it = c && c.found && c.found.items[+add.dataset.i];
     if (!it || it.added) return;
-    const done = AI_KINDS[it.kind].apply(it, c);
+    const done = applyDest(it, c);
     it.added = true;
     logMsg('ok', `From email "${c.subject || '(no subject)'}": ${done}.`);
     renderLists(); bindAll(); refresh(); toast(done + '.');
