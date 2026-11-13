@@ -2347,7 +2347,7 @@ async function buildAuditPdf() {
     para(outstanding.length ? outstanding.map(r => `- ${r.label}`).join('\n') : (recd.length ? 'Everything asked for has been received.' : 'Nothing was asked for.'), 9, { grey: !outstanding.length });
     if (noted.length) {
       y += 4; font(9, true); ensure(14); doc.text('Checklist points with notes', L, y, { baseline: 'top' }); y += 13;
-      noted.forEach(q => { const a = M.answers[q]; para(`- ${q.replace(/^-\s*/, '')}${a.a ? ` ${a.a}` : ''}: ${a.note}`, 9); });
+      noted.forEach(q => { const a = M.answers[q]; para(`- ${q.replace(/^-\s*/, '')} ${answerOf(q)}: ${a.note}`, 9); });
     }
   }
 
@@ -2372,7 +2372,7 @@ async function buildAuditPdf() {
   if (M.adj.length) { para(`Effect on profit: ${money(r2(eff.reduce((a, b) => a + b, 0)))} (${M.adj.map((a, i) => `${a.desc || 'line ' + (i + 1)} ${money(eff[i])}`).join('; ')}).`, 8.5, { grey: true }); y += 4; }
   h2('Checklist');
   table([['Question', 300], ['Last year', 55], ['This year', 55], ['Note', 85]],
-    meetingQuestions().map(q => { const a = M.answers[q] || {}; return [q.replace(/^-\s*/, '   - '), M.prior.answers[q] || '', a.a || '', a.note || '']; }));
+    meetingQuestions().map(q => { const a = M.answers[q] || {}; return [q.replace(/^-\s*/, '   - '), M.prior.answers[q] || '', answerOf(q), a.note || '']; }));
   h2('Information received');
   const recd = receivedItems();
   table([['Item', 395], ['Status', 100]], recd.map(r => [r.label, M.received[r.key] ? 'Received' : 'Outstanding']));
@@ -2592,12 +2592,15 @@ const MEETING_QUESTIONS = [
   'Any other information I should know, e.g. any other income (rental property, savings interest, dividends, income from abroad, or money from selling shares, cryptoassets or a property)?',
   'Any changes I should know about, such as a new job, moving home, getting married, having a child, or starting to pay into a pension or give to charity?',
   'Any VAT queries, or is the client close to the VAT registration threshold?',
-  'Reminder to keep records for at least 5 years',
   'Discuss pension contributions if net income is likely to be above £50,000 (higher rate taxpayer)',
   'Apply to reduce payments on account',
   'Any questions from client?',
   'Confirm that there are no anti-money laundering concerns',
+  'Reminder given to follow HMRC rule to keep records for at least 5 years after the 31 January filing deadline',
 ];
+// Each question's answer until it's changed: YES for the records reminder, NO for the rest.
+const defaultAnswer = q => (/keep records/i.test(q) ? 'YES' : /:$/.test(q) ? '' : 'NO');
+const answerOf = (q, st = S) => { const a = (st.meeting.answers || {})[q] || {}; return has(a.a) ? a.a : defaultAnswer(q); };
 // The firm's checklist is used for every client: as edited on the Meeting tab,
 // or the standard list above. (Older working papers' questions aren't used,
 // but last year's answers still show wherever the question is the same.)
@@ -2722,7 +2725,7 @@ function renderMeeting() {
       <td style="min-width:110px;">${head ? '' : `<select id="mtq-a-${i}" data-mtq="${i}" data-f="a" aria-label="Answer"><option value=""></option><option>YES</option><option>NO</option><option>N/A</option></select>`}</td>
       <td style="min-width:220px;">${head ? '' : `<input id="mtq-n-${i}" data-mtq="${i}" data-f="note" aria-label="Note">`}</td></tr>`;
   }).join('');
-  $$('[data-mtq]').forEach(el => { const q = meetingQuestions()[+el.dataset.mtq]; el.value = ((M.answers[q] || {})[el.dataset.f]) || ''; });
+  $$('[data-mtq]').forEach(el => { const q = meetingQuestions()[+el.dataset.mtq]; el.value = el.dataset.f === 'a' ? answerOf(q) : ((M.answers[q] || {}).note || ''); });
   renderReceived();
 }
 function renderReceived() {
@@ -3579,7 +3582,7 @@ function rollForward(last) {
   n.meeting.questions = meetingQuestions(last);
   const lastOutstanding = (() => { const keep = S; S = last; try { return receivedItems().filter(r => !last.meeting.received[r.key]).map(r => r.label); } finally { S = keep; } })();
   n.meeting.prior = {
-    answers: Object.fromEntries(Object.entries(last.meeting.answers || {}).filter(([, v]) => v && v.a).map(([q, v]) => [q, v.a + (v.note ? ` (${v.note})` : '')])),
+    answers: Object.fromEntries(meetingQuestions().filter(q => answerOf(q, last)).map(q => { const v = (last.meeting.answers || {})[q] || {}; return [q, answerOf(q, last) + (v.note ? ` (${v.note})` : '')]; })),
     notes: last.meeting.notes || '', date: last.meeting.date || '', source: `${last.client.taxYear} workings`, sections: [],
     adj: (last.meeting.adj || []).filter(a => num(a.amount)).map(a => ({ desc: a.desc, type: a.type, amount: num(a.amount), key: a.key })),
     outstanding: lastOutstanding,
@@ -4044,7 +4047,7 @@ $('#exportBtn').onclick = () => {
     M.adj.forEach((a, i) => ms.push([`${has(a.date) ? ukDate(a.date) + ' ' : ''}${a.desc || ''}`, (PL_LINES.find(l => l.key === a.key) || {}).label || '', a.code || codeForKey(a.key) || '',
       MEET_TYPES.find(t => t[0] === a.type)[1], num(a.amount), a.type === 'paid' ? { t: 'n', v: num(has(a.biz) ? a.biz : 100) / 100, z: '0%' } : '', eff[i]]));
     ms.push([], ['CHECKLIST', 'Last year', 'This year', 'Note']);
-    meetingQuestions().forEach(q => { const ans = M.answers[q] || {}; ms.push([q, M.prior.answers[q] || '', ans.a || '', ans.note || '']); });
+    meetingQuestions().forEach(q => { const ans = M.answers[q] || {}; ms.push([q, M.prior.answers[q] || '', answerOf(q), ans.note || '']); });
     const recd = receivedItems();
     ms.push([], [`INFORMATION RECEIVED (${recd.filter(r => M.received[r.key]).length} of ${recd.length})`]);
     recd.forEach(r => ms.push([r.label, M.received[r.key] ? 'Received' : 'Outstanding']));
