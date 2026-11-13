@@ -3066,12 +3066,13 @@ function renderCorrespondence() {
   const list = S.correspondence || [];
   out('corrCount', list.length ? `${list.length} saved` : '');
   out('aiKeyStatus', aiKey() ? 'Using the Anthropic API key saved in this browser (shared with the Extraction Tool).' : 'Add your Anthropic API key first (the Extraction Tool\'s key works).');
-  $('#corrList').innerHTML = list.map(c => `<details class="pool" data-corr="${esc(c.id)}" ${corrOpen.has(c.id) ? 'open' : ''}><summary style="cursor:pointer;"><b>${esc(c.subject || '(no subject)')}</b>${c.found ? ` <span class="chip">${c.found.items.length} suggestion${c.found.items.length !== 1 ? 's' : ''}</span>` : ''}
+  $('#corrList').innerHTML = list.map(c => `<div style="position:relative;">
+      <button class="btn${c.found ? '' : ' primary'}" type="button" data-corr-ai="${esc(c.id)}" ${aiBusy.has(c.id) ? 'disabled' : ''} style="position:absolute;top:6px;right:8px;z-index:1;">${aiBusy.has(c.id) ? 'Reading…' : c.found ? 'Find figures again' : 'Find figures'}</button>
+      <details class="pool" data-corr="${esc(c.id)}" ${corrOpen.has(c.id) ? 'open' : ''}><summary style="cursor:pointer;padding-right:170px;"><b>${esc(c.subject || '(no subject)')}</b>${c.found ? ` <span class="chip">${c.found.items.length} suggestion${c.found.items.length !== 1 ? 's' : ''}</span>` : ''}
       <span class="muted small"> · ${esc(c.from || 'sender not given')} · ${c.date ? esc(new Date(c.date).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })) : 'no date'} · ${esc(c.source)}</span></summary>
       <div class="prior-text" style="color:var(--ink);max-height:320px;overflow:auto;">${esc(c.body)}</div>
       ${renderFound(c)}
-      <div class="row-actions"><button class="btn" type="button" data-corr-ai="${esc(c.id)}" ${aiBusy.has(c.id) ? 'disabled' : ''}>${aiBusy.has(c.id) ? 'Reading…' : c.found ? 'Find figures again' : 'Find figures'}</button>
-        <button class="btn link danger" type="button" data-corr-del="${esc(c.id)}">Remove</button></div></details>`).join('');
+      <div class="row-actions"><button class="btn link danger" type="button" data-corr-del="${esc(c.id)}">Remove</button></div></details></div>`).join('');
   $$('#corrList details[data-corr]').forEach(d => d.addEventListener('toggle', () => { if (d.open) corrOpen.add(d.dataset.corr); else corrOpen.delete(d.dataset.corr); }));
 }
 
@@ -3090,6 +3091,7 @@ const loadAiSdk = () => (aiSdk ||= import(AI_SDK_URL).then(m => m.default).catch
 
 const UOH_SETTINGS = { totalRooms: 'Rooms in the home', workRooms: 'Rooms used for work', hoursPerWeek: 'Hours a week working from home', daysPerWeek: 'Business days a week' };
 const AI_PERIODS = { year: 1, 'one-off': 1, month: 12, quarter: 4, week: 52 };
+const AI_PERIOD_OPTS = [['year', 'a year'], ['month', 'a month'], ['quarter', 'a quarter'], ['week', 'a week'], ['one-off', 'one-off']];
 const FOUND_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['items'],
   properties: {
@@ -3246,10 +3248,25 @@ function renderFound(c) {
     const act = it.added ? '<span class="chip">Added</span>'
       : K.ok(it) ? `<button class="btn" type="button" data-ai-add="${esc(c.id)}" data-i="${i}">${it.kind === 'info' ? 'Add to notes' : 'Add'}</button>`
       : '<span class="muted">Check by hand</span>';
-    return `<tr><td><b>${esc(it.description)}</b>${it.quote ? `<div class="muted">"${esc(it.quote)}"</div>` : ''}</td><td>${esc(amountText(it)) || '-'}${it.taxDeducted != null ? `<div class="muted">tax taken off ${esc(fmt(it.taxDeducted))}</div>` : ''}${it.bizPct != null ? `<div class="muted">${esc(String(it.bizPct))}% business</div>` : ''}</td><td>${esc(K.where(it))}</td><td>${act}</td></tr>`;
+    const id = `data-c="${esc(c.id)}" data-i="${i}"`;
+    const amt = it.added || it.kind === 'info' ? esc(amountText(it)) || '-'
+      : `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><input class="num" ${id} data-ai-amt inputmode="decimal" value="${it.amount == null ? '' : esc(String(it.amount))}" style="width:90px;" aria-label="Amount">${
+        it.kind === 'uoh_setting' ? '' : `<select ${id} data-ai-per aria-label="How often" style="width:auto;">${AI_PERIOD_OPTS.map(([v, l]) => `<option value="${v}" ${(it.period || 'year') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`}</div>${
+        it.kind !== 'uoh_setting' && AI_PERIODS[it.period] > 1 && it.amount != null ? `<div class="muted">= ${esc(fmt(annual(it)))} a year</div>` : ''}`;
+    return `<tr><td><b>${esc(it.description)}</b>${it.quote ? `<div class="muted">"${esc(it.quote)}"</div>` : ''}</td><td>${amt}${it.taxDeducted != null ? `<div class="muted">tax taken off ${esc(fmt(it.taxDeducted))}</div>` : ''}${it.bizPct != null ? `<div class="muted">${esc(String(it.bizPct))}% business</div>` : ''}</td><td>${esc(K.where(it))}</td><td>${act}</td></tr>`;
   }).join('')}</tbody></table></div>
   <p class="muted small">Read by Claude ${esc(new Date(c.found.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}. Check each figure against the email before adding it.</p>`;
 }
+// Correct a suggestion's amount or how often it's paid before adding it.
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (!t.dataset || (!('aiAmt' in t.dataset) && !('aiPer' in t.dataset))) return;
+  const c = S.correspondence.find(x => x.id === t.dataset.c), it = c && c.found && c.found.items[+t.dataset.i];
+  if (!it || it.added) return;
+  if ('aiAmt' in t.dataset) it.amount = has(t.value) ? num(t.value) : null; else it.period = t.value;
+  // Redraw after this event: a change fired by the box losing focus mid-redraw can't redraw again.
+  setTimeout(() => { renderCorrespondence(); refresh(); }, 0);
+});
 document.addEventListener('click', async e => {
   const run = e.target.closest('[data-corr-ai]');
   if (run) {
