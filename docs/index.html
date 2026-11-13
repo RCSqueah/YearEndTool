@@ -276,7 +276,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
   </section>
 
   <section class="panel">
-    <div class="panel-head"><div><h2>Client emails</h2><p class="muted small">Drop the client's emails (.eml or .msg) onto the box above, or paste one here. They're kept with this client's workings, and go into the audit file and the workbook's Audit trail sheet.</p></div><span class="chip" data-out="corrCount"></span></div>
+    <div class="panel-head"><div><h2>Client emails</h2><p class="muted small">Drop the client's emails (.eml or .msg) or selected email text onto the box above, or paste one here and click <b>Add email</b>. They're kept as a record with this client's workings and go into the audit file and the workbook's Audit trail sheet. They don't change any figures: enter amounts from an email on the tab they belong to, e.g. Use of Home.</p></div><span class="chip" data-out="corrCount"></span></div>
     <label class="field"><span>Paste an email</span><textarea id="corrPaste" rows="5" placeholder="Paste the whole email, including the From, Sent and Subject lines if you have them"></textarea></label>
     <div class="row-actions"><button class="btn" type="button" id="corrAdd">Add email</button></div>
     <div id="corrList" style="display:grid;gap:8px;"></div>
@@ -3059,7 +3059,7 @@ function addCorrespondence(m) {
   if (S.correspondence.some(c => `${c.date}|${c.subject}|${c.body.slice(0, 200)}` === key)) { logMsg('ok', `${m.source}: this email is already saved.`); return; }
   S.correspondence.push({ id: newId(), from: m.from || '', to: m.to || '', subject: m.subject || '', date: m.date || '', body: m.body || '', source: m.source || 'Pasted', added: new Date().toISOString() });
   S.correspondence.sort((a, b) => String(a.date || a.added).localeCompare(String(b.date || b.added)));
-  logMsg('ok', `${m.source}: email${m.subject ? ` "${m.subject}"` : ''}${m.date ? ` of ${new Date(m.date).toLocaleDateString('en-GB')}` : ''} saved with the workings.`);
+  logMsg('ok', `${m.source}: email${m.subject ? ` "${m.subject}"` : ''}${m.date ? ` of ${new Date(m.date).toLocaleDateString('en-GB')}` : ''} saved under Client emails, at the bottom of the Import tab.`);
 }
 function renderCorrespondence() {
   const list = S.correspondence || [];
@@ -3173,10 +3173,18 @@ fileIn.addEventListener('change', () => { handleFiles([...fileIn.files]); fileIn
 const drop = $('#drop');
 ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
-drop.addEventListener('drop', e => handleFiles([...e.dataTransfer.files]));
-// Allow dropping anywhere on the page too.
+drop.addEventListener('drop', e => handleDrop(e.dataTransfer));
+// Allow dropping anywhere on the page too (but not into a text box, which takes the text itself).
 document.addEventListener('dragover', e => e.preventDefault());
-document.addEventListener('drop', e => { if (!drop.contains(e.target)) { e.preventDefault(); handleFiles([...e.dataTransfer.files]); } });
+document.addEventListener('drop', e => { if (!drop.contains(e.target) && !e.target.closest('textarea, input')) { e.preventDefault(); handleDrop(e.dataTransfer); } });
+// Files go through the importers; dragged text (e.g. selected from an email) is saved as a client email.
+function handleDrop(dt) {
+  const files = [...(dt.files || [])];
+  if (files.length) { handleFiles(files); return; }
+  const text = (dt.getData('text/plain') || '').trim();
+  if (text) { addCorrespondence({ ...parsePasted(text), source: 'Dropped text' }); renderLists(); refresh(); toast('Email text saved under Client emails.'); return; }
+  toast('Nothing came through. From Outlook, save the email as a file first (File > Save As), or copy the text and paste it under Client emails.');
+}
 
 async function handleFiles(files) {
   // Workbooks first (they set up last year), then backups (account code), then CSVs.
