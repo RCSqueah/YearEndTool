@@ -620,6 +620,11 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     <div class="row-actions"><button class="btn primary" type="button" id="exportBtn">↓ Download Excel workbook</button><span class="muted small" data-out="exportName"></span></div>
   </section>
   <section class="panel" style="margin-top:18px;">
+    <div class="panel-head"><div><h2>Audit file</h2><p class="muted small">Everything about this client's year in one readable PDF, for the client file: progress, the files brought in and when, the meeting (notes, checklist, information received and adjustments agreed), the accounts line by line, Use of Home, capital allowances and tax workings with their notes, the tax return figures, the Xero journals, and the emails.</p></div></div>
+    <div class="row-actions"><button class="btn primary" type="button" id="auditBtn">↓ Download audit file (PDF)</button><button class="btn" type="button" id="auditPreviewBtn">Preview</button><span class="muted small" data-out="auditName"></span></div>
+    <iframe id="auditPreview" title="Audit file preview" hidden style="width:100%;height:760px;border:1px solid var(--rule);border-radius:4px;background:var(--paper);"></iframe>
+  </section>
+  <section class="panel" style="margin-top:18px;">
     <div class="panel-head"><div><h2>Xero manual journals</h2><p class="muted small">One CSV for Xero → Accounting → Manual journals → Import. Use of Home and capital allowances come in as two journals, each with its balancing figure to the clearing account.</p></div></div>
     <div class="checks">
       <label class="check"><input type="checkbox" id="j-incuoh" data-bind="journal.includeUoh"> Use of Home</label>
@@ -754,6 +759,7 @@ function blankState() {
     ca: { mainBf: '', mainAdd: '', mainDisp: '', mainAia: true, srBf: '', srAdd: '', srDisp: '', pools: [], notes: '', prior: { total: null, rows: [], notes: '', source: '' } },
     tax: { items: blankItems(), propAllowance: false, slPlan: 'None', slPaye: '', cb: false, children: '1', cbWeeks: '52', poaPaid: '', notes: '', prior: { notes: '' } },
     trash: [],
+    audit: [],
     meeting: { date: '', how: 'In person', attendees: '', notes: '', questions: [], answers: {}, received: {}, adj: [], prior: { answers: {}, notes: '' } },
     email: { kind: 'request', firstName: '', to: '', replyBy: '', includePrior: true, subject: '', text: '', edited: false, off: {},
       acc: { subject: '', text: '', edited: false, includePrior: true, includeTax: true, includeUoh: true } },
@@ -1539,6 +1545,7 @@ function refresh() {
   refreshMeeting();
   renderExtraction();
   out('exportName', esc(exportFileName()));
+  out('auditName', esc(auditFileName()));
   const J = journalLines(C);
   $('#journalTable').innerHTML = J.journals.map(j => `<tr class="group"><td colspan="5">${esc(j.narration)}</td></tr>` +
     j.lines.map(l => `<tr><td>${esc(J.date)}</td><td>${esc(l.code)}</td><td>${esc(l.desc)}</td><td class="n">${l.amount > 0 ? fmt(l.amount) : ''}</td><td class="n">${l.amount < 0 ? fmt(-l.amount) : ''}</td></tr>`).join('')).join('')
@@ -2227,6 +2234,223 @@ function accountsFileName() {
   const nm = parts.length > 1 ? `${parts[0][0]}_${parts.slice(1).join('_')}` : parts[0];
   return `${nm.replace(/[^\w-]/g, '')}_Final_Accounts_${plYears().now}.pdf`;
 }
+// ── Audit file ─────────────────────────────────────────────────────────────
+function auditFileName() { return accountsFileName().replace('_Final_Accounts_', '_Audit_File_'); }
+// Everything logged for this client, oldest first, without repeats.
+function auditEntries() {
+  const seen = new Set(), list = [];
+  [...(S.audit || []), ...(S.imp.log || []).map(([cls, msg, at]) => ({ cls, msg, at }))].forEach(e => {
+    const k = e.msg + '|' + (e.at || ''); if (seen.has(k)) return; seen.add(k); list.push(e);
+  });
+  return list.sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+}
+async function buildAuditPdf() {
+  await loadScript('vendor/jspdf-2.5.1.umd.min.js');
+  await loadScript('firm-logo.js');
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const C = compute(), T = C.tax, F = plFigures(S, C), f = firm(), name = S.client.name || 'Client', ty = S.client.taxYear;
+  const L = 48, R = 547, W = R - L, BOTTOM = 790;
+  // jsPDF's standard fonts cover Windows-1252 only.
+  const safe = v => String(v ?? '').replace(/−/g, '-').replace(/[→↗]/g, '>').replace(/✓/g, 'Yes').replace(/[^\x00-\xFF‘’“”•–—€…]/g, '');
+  const money = v => (v == null || v === '' ? '-' : safe(fmt(v)));
+  let y = 0;
+  const font = (size, bold, grey) => { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.setTextColor(grey ? 110 : 20); };
+  const newPage = () => { doc.addPage(); y = 64; };
+  const ensure = h => { if (y + h > BOTTOM) newPage(); };
+  const text = (str, x, size = 9, bold = false, opts = {}) => { font(size, bold, opts.grey); doc.text(safe(str), x, y, { baseline: 'top', ...opts }); };
+  const para = (str, size = 9, opts = {}) => {
+    font(size, false, opts.grey);
+    String(safe(str) || '').split('\n').forEach(line => {
+      const lines = line.trim() ? doc.splitTextToSize(line, opts.width || W) : [''];
+      lines.forEach(l => { ensure(size * 1.4); doc.text(l, opts.x || L, y, { baseline: 'top' }); y += size * 1.4; });
+    });
+  };
+  const h1 = t => { newPage(); font(15, true); doc.text(safe(t), L, y, { baseline: 'top' }); y += 22; doc.setDrawColor(14, 106, 98); doc.setLineWidth(1.2); doc.line(L, y, R, y); doc.setDrawColor(0); y += 12; };
+  const h2 = t => { ensure(40); y += 6; font(11, true); doc.text(safe(t), L, y, { baseline: 'top' }); y += 16; };
+  const kv = (rows, labelW = 170) => rows.forEach(([k, v]) => {
+    font(9, false, true); const lines = doc.splitTextToSize(safe(v) || '-', W - labelW);
+    ensure(lines.length * 12.6 + 2); doc.text(safe(k), L, y, { baseline: 'top' }); font(9); doc.text(lines, L + labelW, y, { baseline: 'top' }); y += lines.length * 12.6 + 2;
+  });
+  // cols: [label, width, 'r' to right-align]; rows: arrays of cell text; opts.bold: row indexes in bold.
+  const table = (cols, rows, opts = {}) => {
+    const header = () => {
+      ensure(30); font(7.5, true, true);
+      let x = L; cols.forEach(([lab, w, al]) => { doc.text(safe(lab).toUpperCase(), al === 'r' ? x + w - 4 : x + 2, y, { baseline: 'top', align: al === 'r' ? 'right' : 'left' }); x += w; });
+      y += 12; doc.setDrawColor(150); doc.setLineWidth(0.6); doc.line(L, y, L + cols.reduce((a, c) => a + c[1], 0), y); doc.setDrawColor(0); y += 4;
+    };
+    header();
+    if (!rows.length) { para('None.', 9, { grey: true }); y += 4; return; }
+    rows.forEach((row, ri) => {
+      const bold = opts.bold && opts.bold.includes(ri);
+      font(8.5, bold);
+      const cells = row.map((c, i) => (cols[i][2] === 'r' ? [safe(c)] : doc.splitTextToSize(safe(c), cols[i][1] - 6)));
+      const h = Math.max(...cells.map(c => c.length)) * 11 + 4;
+      if (y + h > BOTTOM) { newPage(); header(); font(8.5, bold); }
+      let x = L;
+      cells.forEach((c, i) => { const [, w, al] = cols[i]; doc.text(c, al === 'r' ? x + w - 4 : x + 2, y, { baseline: 'top', align: al === 'r' ? 'right' : 'left' }); x += w; });
+      y += h; doc.setDrawColor(225); doc.setLineWidth(0.3); doc.line(L, y - 2, L + cols.reduce((a, c) => a + c[1], 0), y - 2); doc.setDrawColor(0);
+    });
+    y += 8;
+  };
+
+  // 1. Cover
+  doc.addImage(window.FIRM_LOGO, 'JPEG', 461, 40, 86, 57);
+  y = 150; font(22, true); doc.text('Year End Audit File', L, y, { baseline: 'top' }); y += 34;
+  font(13, true); doc.text(safe(name), L, y, { baseline: 'top' }); y += 20;
+  font(11); doc.text(safe(`Tax year ${ty}: ${longDate(S.client.start)} to ${longDate(S.client.end)}`), L, y, { baseline: 'top' }); y += 30;
+  kv([['Basis', S.client.basis], ['Address', S.client.address || '-'], ['Prepared by', f.name], ['File produced', new Date().toLocaleString('en-GB')]]);
+  y += 10; h2('Progress');
+  table([['Stage', 300], ['Date', 195]], STAGES.map(([k]) => [STAGE_NAMES[k], ukDate(k === 'meeting' ? S.meeting.date : S.progress[k]) || '-']));
+  h2('Key figures');
+  table([['', 300], ['This year', 100, 'r'], ['Last year', 95, 'r']], [
+    ['Turnover', money(C.pf.turnover), money(S.profit.prior.turnover)],
+    ['Use of Home', money(C.uoh.figure), money(S.profit.prior.uoh)],
+    ['Capital allowances', money(C.ca.figure), money(S.profit.prior.ca)],
+    ['Taxable trading profit', money(C.taxable), money(S.profit.prior.taxable)],
+    ['Tax, NI and charges', money(T.liability), money(S.tax.prior.liability)],
+    [`Due 31 January ${T.endYear + 1}`, money(T.janTotal), ''],
+  ], { bold: [3, 5] });
+
+  // 2. Sources
+  h1('Sources: files brought in');
+  kv([["Last year's Profit and Loss", S.accounts.priorSource || '-'], ["Last year's capital allowances", S.ca.prior.source || '-'], ['Self-employment figures', C.pf.fromAccounts ? 'From the Accounts tab' : 'Entered on the Tax tab']]);
+  y += 6; h2('Batches in these workings');
+  table([['File or batch', 300], ['Lines in the accounts', 100, 'r'], ['Use of Home costs', 95, 'r']], importedBatches().map(bt => [bt.name, String(bt.accounts), bt.uoh ? money(bt.uoh) : '-']));
+  h2('Activity, oldest first');
+  table([['When', 95], ['', 40], ['What happened', 360]], auditEntries().map(e => [e.at ? new Date(e.at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Earlier', e.cls === 'warn' ? 'Check' : '', e.msg]));
+
+  // 3. Meeting
+  const M = S.meeting;
+  h1('Year end meeting');
+  kv([['Date', M.date ? longDate(M.date) : '-'], ['How', M.how || '-'], ['Who attended', M.attendees || '-']]);
+  h2('Notes'); para(M.notes || 'None recorded.', 9, { grey: !M.notes });
+  if (M.prior.notes) { h2("Last year's meeting notes"); para(M.prior.notes, 9, { grey: true }); }
+  h2('Adjustments agreed');
+  const eff = meetingLineEffects();
+  table([['Date', 58], ['What', 150], ['Goes in', 95], ['Acct', 34], ['Type', 72], ['Amount', 52, 'r'], ['Bus. %', 34, 'r']],
+    M.adj.map(a => [ukDate(a.date) || '', a.desc || '', (PL_LINES.find(l => l.key === a.key) || {}).label || '', a.code || codeForKey(a.key) || '', (MEET_TYPES.find(t => t[0] === a.type) || [, ''])[1], money(num(a.amount)), a.type === 'paid' ? `${num(has(a.biz) ? a.biz : 100)}%` : '-']));
+  if (M.adj.length) { para(`Effect on profit: ${money(r2(eff.reduce((a, b) => a + b, 0)))} (${M.adj.map((a, i) => `${a.desc || 'line ' + (i + 1)} ${money(eff[i])}`).join('; ')}).`, 8.5, { grey: true }); y += 4; }
+  h2('Checklist');
+  table([['Question', 300], ['Last year', 55], ['This year', 55], ['Note', 85]],
+    meetingQuestions().map(q => { const a = M.answers[q] || {}; return [q.replace(/^-\s*/, '   - '), M.prior.answers[q] || '', a.a || '', a.note || '']; }));
+  h2('Information received');
+  const recd = receivedItems();
+  table([['Item', 395], ['Status', 100]], recd.map(r => [r.label, M.received[r.key] ? 'Received' : 'Outstanding']));
+
+  // 4. Accounts
+  h1('Accounts: Profit and Loss');
+  const yrs = plYears();
+  const plRows = [], bold = [];
+  plSections(F).forEach(r => {
+    if (r.kind === 'gap') return;
+    if (r.kind === 'head') { bold.push(plRows.length); plRows.push([r.label, '', '', '', '', '', '']); return; }
+    if (r.kind !== 'line') { bold.push(plRows.length); plRows.push([r.label, '', '', '', '', money(r.now), money(r.prior)]); return; }
+    const row = F.rows[PL_LINES.find(l => l.label === r.label).key];
+    plRows.push(['   ' + r.label, row.xero ? money(row.xero) : '', row.adj ? money(row.adj) : '', row.tool ? money(row.tool) : '', row.meet ? money(row.meet) : '', money(r.now), money(r.prior)]);
+  });
+  table([['Line', 160], ['Imported', 60, 'r'], ['Adjusted', 55, 'r'], ['UoH / CA', 55, 'r'], ['Meeting', 55, 'r'], [yrs.now, 55, 'r'], [yrs.prior, 55, 'r']], plRows, { bold });
+  para(F.addTool ? "Use of Home and capital allowances were added from this tool's workings (the journals weren't yet in the imported figures)." : 'Use of Home and capital allowances were taken as already in the imported figures.', 8.5, { grey: true });
+  y += 4; h2('Imported accounts and where each went');
+  table([['Account', 170], ['From', 165], ['Amount', 70, 'r'], ['Goes in', 90]],
+    (S.accounts.xero || []).map(x => [x.name, x.file || x.section || '', money(x.amount), ([...PL_LINES, ...PL_ELSEWHERE].find(l => l.key === plKeyFor(S, x)) || {}).label || '']));
+
+  // 5. Use of Home
+  const U = C.uoh, u = S.uoh;
+  h1('Use of Home');
+  table([['Item', 150], ['Notes', 195], ['This year', 75, 'r'], ['Last year', 75, 'r']],
+    u.lines.map(l => [l.desc || '', [l.note, isSum(l.expr) ? `(${l.expr})` : '', Object.keys(l.imp || {}).length && !has(l.expr) ? 'from ' + Object.keys(l.imp).join(', ') : ''].filter(Boolean).join(' · '), money(lineAmount(l)), l.prior != null ? money(l.prior) : '-']));
+  h2('Working');
+  kv([['Total running costs', money(U.total)], ['Work space', num(u.workRooms) && num(u.totalRooms) ? `${num(u.workRooms)} of ${num(u.totalRooms)} rooms (${pct(U.roomFrac)})` : 'No rooms entered'],
+    ['Time', `${U.timeText} (${pct(U.timeFrac)} business)`], ['Shared work space', u.shared ? `Disallow ${pct(U.shareFrac)}` : 'No'],
+    ['Actual costs claim', money(U.actual)], ['HMRC flat rate', `${money(U.flat)} (${money(U.flatRate)} a month)`], ['Method claimed', u.method === 'flat' ? 'HMRC flat rate' : 'Actual costs'],
+    ['Figure for the accounts', money(U.figure)], ['Last year', u.prior.total != null ? money(u.prior.total) : '-']]);
+  if (u.notes) { h2('Notes'); para(u.notes); }
+  if (u.prior.notes) { h2("Last year's notes"); para(u.prior.notes, 9, { grey: true }); }
+
+  // 6. Capital allowances
+  h1('Capital allowances');
+  const caCols = [['Pool', 120], ['B/fwd', 52, 'r'], ['Additions', 52, 'r'], ['AIA/FYA', 48, 'r'], ['Disposals', 50, 'r'], ['WDA/bal.', 50, 'r'], ['C/fwd', 52, 'r'], ['Bus. %', 33, 'r'], ['Claim', 40, 'r']];
+  const caRow = (n, p) => [n, money(p.bf), money(p.add), money(p.aia), money(p.disp), money(p.wdaShown), money(p.cf), pct(p.biz), money(p.claim)];
+  table(caCols, [caRow('Main pool', C.ca.main), caRow('Special rate pool', C.ca.sr), ...C.ca.pools.map((p, i) => caRow(S.ca.pools[i].desc || 'Asset', p)), ['Total', '', '', '', '', '', '', '', money(C.ca.total)]], { bold: [2 + C.ca.pools.length] });
+  if ((S.ca.prior.rows || []).length) { h2("Last year's calculation"); table(caCols, [...S.ca.prior.rows.map(r => caRow(r.name, r)), ['Total', '', '', '', '', '', '', '', money(S.ca.prior.total)]], { bold: [S.ca.prior.rows.length] }); }
+  if (S.ca.notes) { h2('Notes'); para(S.ca.notes); }
+  if (S.ca.prior.notes) { h2("Last year's notes"); para(S.ca.prior.notes, 9, { grey: true }); }
+
+  // 7. Tax
+  h1(`Tax ${ty}`);
+  h2('Self-employment');
+  table([['', 300], ['This year', 100, 'r'], ['Last year', 95, 'r']], [
+    ['Turnover', money(C.pf.turnover), money(S.profit.prior.turnover)], ['Other business income', money(C.pf.otherIncome), money(S.profit.prior.otherIncome)],
+    ['Expenses, excluding Use of Home and capital allowances', money(C.pf.expenses), money(S.profit.prior.expenses)], ['Use of Home', money(C.uoh.figure), money(S.profit.prior.uoh)],
+    ['Net profit', money(C.net), money(S.profit.prior.net)], ['Capital allowances', money(C.ca.figure), money(S.profit.prior.ca)],
+    ['Tax adjustments', money(num(S.profit.adjustments)), money(S.profit.prior.adjustments)], ['Taxable trading profit', money(C.taxable), money(S.profit.prior.taxable)]], { bold: [4, 7] });
+  TAX_SECTIONS.forEach(sec => {
+    const list = items(S, sec.key); if (!list.length) return;
+    h2(`${sec.title} (${sec.form})`);
+    table([['Line', 150], ['Goes in / ref', 115], ['This year', 65, 'r'], ['Last year', 65, 'r'], ['Notes', 100]],
+      list.map(it => [it.desc || '', sec.kinds ? (sec.kinds.find(k => k[0] === it.kind) || ['', ''])[1] : it.ref || '', money(num(it.amount)) + (has(it.tax) ? ` (tax ${money(num(it.tax))})` : ''), it.prior != null ? money(it.prior) : '-', it.note || '']));
+  });
+  kv([['Student loan', S.tax.slPlan], ['Child Benefit', S.tax.cb ? `Yes, ${S.tax.children} child(ren), ${S.tax.cbWeeks} weeks` : 'No'], ['Payments on account made', money(num(S.tax.poaPaid))]]);
+  h2('Tax calculation');
+  table([['', 395], ['£', 100, 'r']], [
+    ['Total income', money(T.totalIncome)], ['Personal allowance', money(-Math.min(T.pa, T.totalIncome))], ['Taxable income', money(T.taxable)],
+    ...T.lines.map(([l, v]) => [l, money(v)]), ...(T.financeCredit ? [['Relief on property finance costs', money(-T.financeCredit)]] : []),
+    ['Income tax', money(T.it)], ['Class 4 NI', money(T.c4)], ['Student loan', money(T.sl)], ['High Income Child Benefit Charge', money(T.hicbc)],
+    ['Total liability', money(T.liability)], ['Less: tax deducted at source', money(-T.atSource)], ['Less: payments on account made', money(-num(S.tax.poaPaid))],
+    [`Balancing payment, 31 Jan ${T.endYear + 1}`, money(T.balancing)], [`1st payment on account, 31 Jan ${T.endYear + 1}`, money(T.poa)],
+    [`Total due 31 Jan ${T.endYear + 1}`, money(T.janTotal)], [`2nd payment on account, 31 Jul ${T.endYear + 1}`, money(T.poa)]], { bold: [] });
+  if (S.tax.notes) { h2('Notes'); para(S.tax.notes); }
+  if (S.tax.prior.notes) { h2("Last year's notes"); para(S.tax.prior.notes, 9, { grey: true }); }
+
+  // 8. Tax return
+  h1('Tax return figures');
+  const rr = [], rb = [];
+  returnRows(S, C).forEach(([page, box, entry, now, prior]) => {
+    if (page === null) { rb.push(rr.length); rr.push([entry, '', '', '', '']); return; }
+    rr.push([page, box, entry, typeof now === 'number' ? money(now) : (now || '-'), typeof prior === 'number' ? money(prior) : (prior || '-')]);
+  });
+  table([['Page', 45], ['Box', 30], ['Entry', 250], ['This year', 85, 'r'], ['Last year', 85, 'r']], rr, { bold: rb });
+
+  // 9. Journals
+  h1('Xero manual journals');
+  const J = journalLines(C);
+  if (!J.journals.length) para('Nothing to post.', 9, { grey: true });
+  J.journals.forEach(j => {
+    h2(`${j.narration} (${J.date})`);
+    table([['Account', 50], ['Description', 305], ['Debit', 70, 'r'], ['Credit', 70, 'r']], j.lines.map(l => [l.code, l.desc, l.amount > 0 ? money(l.amount) : '', l.amount < 0 ? money(-l.amount) : '']));
+  });
+
+  // 10. Emails
+  h1('Emails');
+  h2(`Information request${S.progress.requested ? ` (sent ${longDate(S.progress.requested)})` : ''}`);
+  kv([['Subject', S.email.subject || '']]); y += 4; para(S.email.edited ? S.email.text : composeEmail(), 8.5);
+  h2(`Accounts for approval${S.progress.sent ? ` (sent ${longDate(S.progress.sent)})` : ''}`);
+  kv([['Subject', S.email.acc.subject || '']]); y += 4; para(S.email.acc.edited ? S.email.acc.text : composeAccountsEmail(), 8.5);
+
+  // Header and footer on every page
+  const n = doc.getNumberOfPages();
+  for (let i = 1; i <= n; i++) {
+    doc.setPage(i);
+    font(7.5, false, true);
+    if (i > 1) doc.text(safe(`${name} · ${ty} · Year end audit file`), L, 36, { baseline: 'top' });
+    doc.text(safe(`${f.name} · produced ${new Date().toLocaleDateString('en-GB')}`), L, 812, { baseline: 'top' });
+    doc.text(`Page ${i} of ${n}`, R, 812, { baseline: 'top', align: 'right' });
+  }
+  return doc;
+}
+$('#auditBtn').onclick = async () => {
+  try { saveNow(); const doc = await buildAuditPdf(); doc.save(auditFileName()); toast('Downloaded ' + auditFileName()); }
+  catch (e) { console.error(e); toast('Could not make the audit file: ' + e.message); }
+};
+$('#auditPreviewBtn').onclick = async () => {
+  try {
+    const doc = await buildAuditPdf(), fr = $('#auditPreview');
+    if (fr.dataset.url) URL.revokeObjectURL(fr.dataset.url);
+    fr.dataset.url = URL.createObjectURL(doc.output('blob')); fr.src = fr.dataset.url; fr.hidden = false;
+  } catch (e) { console.error(e); toast('Could not make the audit file: ' + e.message); }
+};
+
 async function buildAccountsPdf() {
   await loadScript('vendor/jspdf-2.5.1.umd.min.js');
   await loadScript('firm-logo.js');
@@ -2539,6 +2763,7 @@ window.addEventListener('storage', e => { if (e.key === INBOX_KEY) { renderInbox
 
 // ── Clients ────────────────────────────────────────────────────────────────
 const STAGES = [['requested', 'Request information'], ['received', 'Receive information'], ['meeting', 'Hold the meeting'], ['sent', 'Send the accounts'], ['approved', 'Get approval'], ['filed', 'File the return']];
+const STAGE_NAMES = { requested: 'Information requested', received: 'Information received', meeting: 'Meeting', sent: 'Accounts sent', approved: 'Approved by the client', filed: 'Return filed' };
 const nextStepOf = pg => { const s = STAGES.find(([k]) => !has(pg[k])); return s ? s[1] : ''; };
 const namesMatch = (a, b) => { const last = n => String(n || '').trim().toLowerCase().split(/\s+/).pop(); return !a || !b || last(a) === last(b); };
 const shortDate = v => { const d = dayOf(v); return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''; };
@@ -2700,9 +2925,15 @@ function onRate(el, type) {
 }
 
 function renderLog() {
-  $('#log').innerHTML = (S.imp.log || []).map(([cls, msg]) => `<li class="${cls}">${esc(msg)}</li>`).join('');
+  $('#log').innerHTML = (S.imp.log || []).slice(0, 40).map(([cls, msg]) => `<li class="${cls}">${esc(msg)}</li>`).join('');
 }
-function logMsg(cls, msg) { S.imp.log.unshift([cls, msg]); S.imp.log = S.imp.log.slice(0, 40); }
+function logMsg(cls, msg) {
+  S.imp.log.unshift([cls, msg, new Date().toISOString()]);
+  S.imp.log = S.imp.log.slice(0, 200);
+  // The full history is kept for the audit file; the screen shows the latest.
+  (S.audit ||= []).unshift({ at: new Date().toISOString(), cls, msg });
+  S.audit = S.audit.slice(0, 1000);
+}
 
 let toastTimer;
 function toast(msg, action) {
@@ -3560,6 +3791,23 @@ $('#exportBtn').onclick = () => {
     ms.push([], [`INFORMATION RECEIVED (${recd.filter(r => M.received[r.key]).length} of ${recd.length})`]);
     recd.forEach(r => ms.push([r.label, M.received[r.key] ? 'Received' : 'Outstanding']));
     XLSX.utils.book_append_sheet(wb, sheetFrom(ms, [48, 26, 10, 18, 12, 11, 14]), 'Meeting'); }
+  { const J = journalLines(C);
+    const js = [...head, ['XERO MANUAL JOURNALS', 'Date', 'Account', 'Description', 'Debit', 'Credit']];
+    J.journals.forEach(j => { js.push([]); js.push([j.narration.toUpperCase()]); j.lines.forEach(l => js.push(['', J.date, l.code, l.desc, l.amount > 0 ? l.amount : '', l.amount < 0 ? -l.amount : ''])); });
+    if (!J.journals.length) js.push(['Nothing to post.']);
+    XLSX.utils.book_append_sheet(wb, sheetFrom(js, [30, 12, 9, 80, 12, 12]), 'Journals'); }
+  { const at = [...head, ['PROGRESS']];
+    STAGES.forEach(([k]) => at.push([STAGE_NAMES[k], ukDate(k === 'meeting' ? S.meeting.date : S.progress[k]) || '']));
+    at.push([], ['SOURCES']);
+    if (S.accounts.priorSource) at.push(["Last year's Profit and Loss", S.accounts.priorSource]);
+    if (S.ca.prior.source) at.push(["Last year's capital allowances", S.ca.prior.source]);
+    importedBatches().forEach(bt => at.push(['Imported', `${bt.name}: ${bt.accounts} lines in the accounts${bt.uoh ? `, ${fmt(bt.uoh)} of Use of Home costs` : ''}`]));
+    at.push([], ['ACTIVITY', 'When', 'What']);
+    auditEntries().forEach(e => at.push([e.cls === 'warn' ? 'Check' : '', e.at ? new Date(e.at).toLocaleString('en-GB') : '', e.msg]));
+    at.push([], ['EMAILS']);
+    const req = S.email.edited ? S.email.text : composeEmail(), acc = S.email.acc.edited ? S.email.acc.text : composeAccountsEmail();
+    at.push(['Information request', S.email.subject || '', req], ['Accounts for approval', S.email.acc.subject || '', acc]);
+    XLSX.utils.book_append_sheet(wb, sheetFrom(at, [28, 22, 110]), 'Audit trail'); }
   // The full workings, so the file can be dropped back in. Cells hold at most 32,767 characters.
   const json = JSON.stringify({ ...S, imp: { ...S.imp, log: [] }, rates: hasRates(S.client.taxYear) ? { [S.client.taxYear]: ratesFor(S.client.taxYear) } : {} });
   const chunks = []; for (let i = 0; i < json.length; i += 30000) chunks.push([json.slice(i, i + 30000)]);
