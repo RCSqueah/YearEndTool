@@ -328,6 +328,12 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
 <!-- ───────────── MEETING ───────────── -->
 <div data-pane="meeting" hidden>
   <div class="stack">
+  <section class="panel" id="mtPriorPanel">
+    <div class="panel-head"><div><h2>Last year's meeting</h2><p class="muted small" data-out="mtPriorSource"></p></div>
+      <button class="btn" type="button" id="mtPriorToNotes">Add to this year's notes</button></div>
+    <div class="prior-text" data-out="mtPriorBody" style="color:var(--ink);"></div>
+  </section>
+
   <section class="panel">
     <div class="panel-head"><div><h2>Year end meeting</h2><p class="muted small">The meeting date fills the Client Approval date on the accounts PDF, unless one is set on the Accounts tab.</p></div></div>
     <div class="fields">
@@ -336,7 +342,6 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
       <label class="field field-wide"><span>Who attended</span><input id="mt-who" data-bind="meeting.attendees" placeholder="e.g. John Vandoros, Stephen Queah"></label>
       <label class="field field-wide"><span>Notes</span><textarea id="mt-notes" data-bind="meeting.notes" placeholder="What was discussed and agreed"></textarea></label>
     </div>
-    <div class="field" id="mtPriorNotesWrap"><span>Last year's meeting notes</span><div class="prior-text" data-out="mtPriorNotes"></div></div>
   </section>
 
   <section class="panel">
@@ -760,7 +765,7 @@ function blankState() {
     tax: { items: blankItems(), propAllowance: false, slPlan: 'None', slPaye: '', cb: false, children: '1', cbWeeks: '52', poaPaid: '', notes: '', prior: { notes: '' } },
     trash: [],
     audit: [],
-    meeting: { date: '', how: 'In person', attendees: '', notes: '', questions: [], answers: {}, received: {}, adj: [], prior: { answers: {}, notes: '' } },
+    meeting: { date: '', how: 'In person', attendees: '', notes: '', questions: [], answers: {}, received: {}, adj: [], prior: { answers: {}, notes: '', date: '', source: '', sections: [], adj: [], outstanding: [] } },
     email: { kind: 'request', firstName: '', to: '', replyBy: '', includePrior: true, subject: '', text: '', edited: false, off: {},
       acc: { subject: '', text: '', edited: false, includePrior: true, includeTax: true, includeUoh: true } },
     accounts: { xero: [], xeroFile: '', xeroNet: null, map: {}, adj: {}, addTool: null, prior: {}, priorSource: '', approvalDate: '', reportDate: '' },
@@ -2311,6 +2316,24 @@ async function buildAuditPdf() {
     ['Tax, NI and charges', money(T.liability), money(S.tax.prior.liability)],
     [`Due 31 January ${T.endYear + 1}`, money(T.janTotal), ''],
   ], { bold: [3, 5] });
+  {
+    const M = S.meeting, eff = meetingLineEffects(), recd = receivedItems();
+    const outstanding = recd.filter(r => !M.received[r.key]);
+    const noted = meetingQuestions().filter(q => (M.answers[q] || {}).note);
+    h2('Meeting summary');
+    kv([['Meeting', M.date ? `${longDate(M.date)}, ${(M.how || '').toLowerCase()}` : 'Not held yet'], ['Who attended', M.attendees || '-']]);
+    if (M.notes) { y += 2; para(M.notes, 9); }
+    y += 4; font(9, true); ensure(14); doc.text('Adjustments agreed', L, y, { baseline: 'top' }); y += 13;
+    if (M.adj.length) M.adj.forEach((a, i) => para(`- ${a.desc || 'Adjustment'}: ${(MEET_TYPES.find(t => t[0] === a.type) || [, ''])[1].toLowerCase()}, ${money(num(a.amount))} (profit ${eff[i] >= 0 ? '+' : ''}${money(eff[i])})`, 9));
+    else para('None.', 9, { grey: true });
+    if (M.adj.length) para(`Total effect on profit: ${money(r2(eff.reduce((a, b) => a + b, 0)))}`, 9);
+    y += 4; font(9, true); ensure(14); doc.text('Information outstanding', L, y, { baseline: 'top' }); y += 13;
+    para(outstanding.length ? outstanding.map(r => `- ${r.label}`).join('\n') : (recd.length ? 'Everything asked for has been received.' : 'Nothing was asked for.'), 9, { grey: !outstanding.length });
+    if (noted.length) {
+      y += 4; font(9, true); ensure(14); doc.text('Checklist points with notes', L, y, { baseline: 'top' }); y += 13;
+      noted.forEach(q => { const a = M.answers[q]; para(`- ${q.replace(/^-\s*/, '')}${a.a ? ` ${a.a}` : ''}: ${a.note}`, 9); });
+    }
+  }
 
   // 2. Sources
   h1('Sources: files brought in');
@@ -2325,7 +2348,7 @@ async function buildAuditPdf() {
   h1('Year end meeting');
   kv([['Date', M.date ? longDate(M.date) : '-'], ['How', M.how || '-'], ['Who attended', M.attendees || '-']]);
   h2('Notes'); para(M.notes || 'None recorded.', 9, { grey: !M.notes });
-  if (M.prior.notes) { h2("Last year's meeting notes"); para(M.prior.notes, 9, { grey: true }); }
+  { const pts = priorMeetingPoints(); if (pts.length) { h2("Last year's meeting"); para(pts.join('\n'), 8.5, { grey: true }); } }
   h2('Adjustments agreed');
   const eff = meetingLineEffects();
   table([['Date', 58], ['What', 150], ['Goes in', 95], ['Acct', 34], ['Type', 72], ['Amount', 52, 'r'], ['Bus. %', 34, 'r']],
@@ -2566,6 +2589,46 @@ function codeForKey(key) {
   const usual = Object.entries(CODE_LINES).find(([, v]) => v[1] === key);
   return usual ? usual[0] : '';
 }
+// Fixed labels in the working papers' note columns (not notes typed for a client).
+const TEMPLATE_LABELS = [
+  /^motor expenses - critical information$/, /^last year - did client own their car\?$/, /^did the client buy a new car during this period\?$/,
+  /^disallow non-work proportion$/, /^car lease payments$/, /^total paid$/, /^does this include vat\?$/, /^net \(excl\. vat\)$/,
+  /^does the high emission disallowance apply/, /^figure for accounts$/, /^car loan interest - workings$/, /^total amount payable/, /^list value of car$/,
+  /^financing element$/, /^length of finance arrangement/, /^when did the arrangement begin\?$/, /^year \d - number of months$/, /^total$/,
+  /^how many months in this accounting period$/, /^total interest$/, /^% arrangement falling in this period$/, /^business mileage$/,
+  /^total finance interest\/charges$/, /^disallowance %$/, /^are there any cfa debts that were "probable" at the year end\?$/,
+];
+const isTemplateLabel = t => !t || t.length < 4 || /^(yes|no|n\/a|plan \d|postgrad\w*)$/i.test(t) || /^\d{4}\/\d{2,4}$/.test(t) || TEMPLATE_LABELS.some(re => re.test(t.toLowerCase()));
+const titleCase = t => String(t || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+// What came up last year, as lines to read before this year's meeting.
+function priorMeetingPoints(st = S) {
+  const P = st.meeting.prior || {}, out = [];
+  if (P.notes) out.push('Notes:', ...P.notes.split('\n').map(l => '  ' + l), '');
+  if ((P.adj || []).length) {
+    out.push('Adjustments agreed last year (ask about these again):');
+    P.adj.forEach(a => out.push(`  - ${a.desc || 'Adjustment'}: ${(MEET_TYPES.find(t => t[0] === a.type) || [, ''])[1].toLowerCase()}, ${fmt(a.amount)}`));
+    out.push('');
+  }
+  if ((P.outstanding || []).length) { out.push('Still outstanding at the end of last year:', ...P.outstanding.map(o => `  - ${o}`), ''); }
+  const noted = Object.entries(P.answers || {}).filter(([, v]) => /\(.+\)$/.test(v));
+  if (noted.length) { out.push('Checklist points with notes:', ...noted.map(([q, v]) => `  - ${q.replace(/^-\s*/, '')} ${v}`), ''); }
+  (P.sections || []).forEach(sc => {
+    out.push(`${titleCase(sc.title)}:`);
+    sc.pre.forEach(t => out.push(`  - Before the meeting: ${t}`));
+    sc.mtg.forEach(t => out.push(`  - At the meeting: ${t}`));
+    out.push('');
+  });
+  while (out.length && !out[out.length - 1]) out.pop();
+  return out;
+}
+$('#mtPriorToNotes').onclick = () => {
+  const pts = priorMeetingPoints();
+  if (!pts.length) return;
+  const block = `Follow up from last year:\n${pts.join('\n')}`;
+  S.meeting.notes = has(S.meeting.notes) ? `${S.meeting.notes}\n\n${block}` : block;
+  bindAll(); refresh(); toast("Added last year's points to this year's notes.");
+};
+
 // Each adjustment's effect on profit (costs paid personally lower it; private use and income raise it).
 function meetingLineEffects(st = S) {
   return (st.meeting.adj || []).map(a => {
@@ -2635,8 +2698,10 @@ function refreshMeeting() {
   const noCode = M.adj.filter(a => num(a.amount) && !has(a.code) && !codeForKey(a.key));
   const warn = $('[data-out="mtCodeWarn"]'); warn.hidden = !noCode.length;
   if (noCode.length) warn.textContent = `Add an account code for ${noCode.map(a => a.desc || 'each line').join(', ')}; the Xero journal needs one.`;
-  out('mtPriorNotes', esc(M.prior.notes || ''));
-  $('#mtPriorNotesWrap').hidden = !M.prior.notes;
+  const pts = priorMeetingPoints();
+  $('#mtPriorPanel').hidden = !pts.length;
+  out('mtPriorBody', esc(pts.join('\n')));
+  out('mtPriorSource', M.prior.source ? `From ${esc(M.prior.source)}${M.prior.date ? `, meeting on ${esc(longDate(M.prior.date))}` : ''}` : '');
 }
 document.addEventListener('input', e => {
   const el = e.target;
@@ -3222,6 +3287,33 @@ function importWorkingPapers(name, wb) {
     if (parts.length) fresh.client.address = parts.join(', ');
   }
 
+  // Notes typed in the PRE-MEETING NOTES (D, E) and MEETING NOTES (F) columns
+  // of the Income, Expenses and Tax sheets, by section. Formulas, YES/NO
+  // answers and the template's own labels are left out.
+  {
+    const sections = [];
+    ['Income', 'Expenses', 'Tax'].forEach(shName => {
+      const ws = sheet(shName); if (!ws) return;
+      const h = wsHelpers(ws);
+      let cur = null;
+      for (let r = 1; r <= h.last; r++) {
+        if (/^pre-meeting notes$/i.test(String(h.v('D' + r) || '').trim())) {
+          cur = { title: String(h.v('B' + r) || shName).trim(), pre: [], mtg: [] }; sections.push(cur); continue;
+        }
+        if (!cur) continue;
+        [['D', 'pre'], ['E', 'pre'], ['F', 'mtg']].forEach(([col, kind]) => {
+          const cell = ws[col + r];
+          if (!cell || cell.f || typeof cell.v !== 'string') return;
+          const t = cell.v.replace(/\s+/g, ' ').trim();
+          if (isTemplateLabel(t)) return;
+          cur[kind].push(t);
+        });
+      }
+    });
+    fresh.meeting.prior.sections = sections.filter(sc => sc.pre.length || sc.mtg.length);
+    fresh.meeting.prior.source = name;
+  }
+
   // Post-meeting checklist: the questions and last year's answers.
   {
     const top = chk.find('B', /post-meeting checklist/i);
@@ -3271,7 +3363,7 @@ function importOwnExport(name, wb) {
   const last = migrate(data);
   // Reopen the same year's workings; roll an earlier year forward.
   const reopen = sameClient(S.client.name, last.client.name) ? last.client.taxYear === S.client.taxYear
-    : (lsRead(recordKey(last.id)) != null || last.client.taxYear >= currentWorkYear());
+    : last.client.taxYear >= currentWorkYear();
   if (reopen) {
     adopt(last);
     logMsg('ok', `${name}: reopened ${S.client.name}'s ${S.client.taxYear} workings.`);
@@ -3325,7 +3417,13 @@ function rollForward(last) {
   n.accounts.map = { ...(last.accounts && last.accounts.map) };
   n.profit.source = last.profit.source;
   n.meeting.questions = meetingQuestions(last);
-  n.meeting.prior = { answers: Object.fromEntries(Object.entries(last.meeting.answers || {}).filter(([, v]) => v && v.a).map(([q, v]) => [q, v.a + (v.note ? ` (${v.note})` : '')])), notes: last.meeting.notes || '' };
+  const lastOutstanding = (() => { const keep = S; S = last; try { return receivedItems().filter(r => !last.meeting.received[r.key]).map(r => r.label); } finally { S = keep; } })();
+  n.meeting.prior = {
+    answers: Object.fromEntries(Object.entries(last.meeting.answers || {}).filter(([, v]) => v && v.a).map(([q, v]) => [q, v.a + (v.note ? ` (${v.note})` : '')])),
+    notes: last.meeting.notes || '', date: last.meeting.date || '', source: `${last.client.taxYear} workings`, sections: [],
+    adj: (last.meeting.adj || []).filter(a => num(a.amount)).map(a => ({ desc: a.desc, type: a.type, amount: num(a.amount), key: a.key })),
+    outstanding: lastOutstanding,
+  };
   n.profit.prior = { turnover: C.pf.turnover, otherIncome: C.pf.otherIncome, expenses: C.pf.expenses, uoh: C.uoh.figure, net: C.net, ca: C.ca.figure, adjustments: num(last.profit.adjustments), taxable: C.taxable };
   return n;
 }
