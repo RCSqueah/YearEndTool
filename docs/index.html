@@ -170,7 +170,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     </div>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="clients">Clients</button>
-      <button role="tab" data-tab="client" aria-selected="true">Client &amp; import <span class="chip warn" data-out="inboxCount"></span></button>
+      <button role="tab" data-tab="client" aria-selected="true">Import <span class="chip warn" data-out="inboxCount"></span></button>
       <button role="tab" data-tab="uoh">Use of Home</button>
       <button role="tab" data-tab="ca">Capital allowances</button>
       <button role="tab" data-tab="accounts">Accounts</button>
@@ -239,7 +239,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
   <section class="panel">
     <div class="panel-head"><h2>Bring in last year and this year's figures</h2></div>
     <div class="drop" id="drop">
-      <p><b>Drop files here</b> or <label class="btn link">choose files<input type="file" id="fileIn" multiple accept=".xlsx,.xlsm,.xls,.csv,.json,.pdf"></label></p>
+      <p><b>Drop files here</b> or <label class="btn link">choose files<input type="file" id="fileIn" multiple accept=".xlsx,.xlsm,.xls,.csv,.json,.pdf,.eml,.msg"></label></p>
       <p class="muted small">You can drop several files at once. The tool recognises each one by its contents.</p>
     </div>
     <div class="grid2 small">
@@ -273,6 +273,13 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     <div class="note info" id="docsInbox" hidden></div>
     <div id="docsBatches" style="display:grid;gap:6px;"></div>
     <ul class="log" id="log"></ul>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><div><h2>Client emails</h2><p class="muted small">Drop the client's emails (.eml or .msg) onto the box above, or paste one here. They're kept with this client's workings, and go into the audit file and the workbook's Audit trail sheet.</p></div><span class="chip" data-out="corrCount"></span></div>
+    <label class="field"><span>Paste an email</span><textarea id="corrPaste" rows="5" placeholder="Paste the whole email, including the From, Sent and Subject lines if you have them"></textarea></label>
+    <div class="row-actions"><button class="btn" type="button" id="corrAdd">Add email</button></div>
+    <div id="corrList" style="display:grid;gap:8px;"></div>
   </section>
 
   <section class="panel">
@@ -765,6 +772,7 @@ function blankState() {
     tax: { items: blankItems(), propAllowance: false, slPlan: 'None', slPaye: '', cb: false, children: '1', cbWeeks: '52', poaPaid: '', notes: '', prior: { notes: '' } },
     trash: [],
     audit: [],
+    correspondence: [],
     meeting: { date: '', how: 'In person', attendees: '', notes: '', questions: [], answers: {}, received: {}, adj: [], prior: { answers: {}, notes: '', date: '', source: '', sections: [], adj: [], outstanding: [] } },
     email: { kind: 'request', firstName: '', to: '', replyBy: '', includePrior: true, subject: '', text: '', edited: false, off: {},
       acc: { subject: '', text: '', edited: false, includePrior: true, includeTax: true, includeUoh: true } },
@@ -1548,6 +1556,7 @@ function refresh() {
 
   renderAccounts(C);
   refreshMeeting();
+  renderCorrespondence();
   renderExtraction();
   out('exportName', esc(exportFileName()));
   out('auditName', esc(auditFileName()));
@@ -2451,6 +2460,14 @@ async function buildAuditPdf() {
   h2(`Accounts for approval${S.progress.sent ? ` (sent ${longDate(S.progress.sent)})` : ''}`);
   kv([['Subject', S.email.acc.subject || '']]); y += 4; para(S.email.acc.edited ? S.email.acc.text : composeAccountsEmail(), 8.5);
 
+  h1('Client emails');
+  if (!(S.correspondence || []).length) para('None saved.', 9, { grey: true });
+  (S.correspondence || []).forEach(c => {
+    h2(c.subject || '(no subject)');
+    kv([['From', c.from || '-'], ['Date', c.date ? new Date(c.date).toLocaleString('en-GB') : '-'], ['Saved from', c.source]]);
+    y += 4; para(c.body, 8.5); y += 6;
+  });
+
   // Header and footer on every page
   const n = doc.getNumberOfPages();
   for (let i = 1; i <= n; i++) {
@@ -2824,7 +2841,7 @@ document.addEventListener('click', e => {
   renderInbox();
 });
 window.addEventListener('focus', renderInbox);
-window.addEventListener('storage', e => { if (e.key === INBOX_KEY) { renderInbox(); toast('Lines from the Extraction Tool are waiting on the Client & import tab.'); } });
+window.addEventListener('storage', e => { if (e.key === INBOX_KEY) { renderInbox(); toast('Lines from the Extraction Tool are waiting on the Import tab.'); } });
 
 // ── Clients ────────────────────────────────────────────────────────────────
 const STAGES = [['requested', 'Request information'], ['received', 'Receive information'], ['meeting', 'Hold the meeting'], ['sent', 'Send the accounts'], ['approved', 'Get approval'], ['filed', 'File the return']];
@@ -2902,7 +2919,7 @@ function renderClients() {
       <td style="white-space:nowrap;">${step ? esc(step) : '<span class="chip">Complete</span>'}</td>
       <td class="n">${r.taxable != null ? fmt0(r.taxable) : '–'}</td><td class="n">${r.jan != null ? fmt0(r.jan) : '–'}</td>
       <td><button class="btn link danger" type="button" data-delete-client="${esc(r.id)}" aria-label="Delete ${esc(r.name)} ${esc(r.taxYear)}">✕</button></td></tr>`;
-  }).join('') || '<tr><td colspan="12" class="muted">No clients yet. Click + New client, or drop last year\'s files onto the Client & import tab.</td></tr>';
+  }).join('') || '<tr><td colspan="12" class="muted">No clients yet. Click + New client, or drop last year\'s files onto the Import tab.</td></tr>';
 }
 document.addEventListener('click', e => {
   const o = e.target.closest('[data-open-client]');
@@ -2952,6 +2969,121 @@ $('#restoreIn').addEventListener('change', async e => {
   if (!f) return;
   try { const data = JSON.parse(await f.text()); if (data.app !== 'year-end-tool') throw new Error('not a Year End Tool backup'); restoreYearEndBackup(f.name, data); }
   catch (err) { toast(`${f.name}: ${err.message}.`); }
+});
+
+// ── Client emails ──────────────────────────────────────────────────────────
+// .eml: MIME text. Headers, then the plain-text part (or the HTML part as text).
+function decodeWords(v) {
+  return String(v || '').replace(/=\?([^?]+)\?([bq])\?([^?]*)\?=/gi, (_, cs, enc, txt) => {
+    try {
+      const bytes = enc.toLowerCase() === 'b' ? Uint8Array.from(atob(txt), c => c.charCodeAt(0))
+        : Uint8Array.from(txt.replace(/_/g, ' ').replace(/=([0-9a-f]{2})/gi, (m, h) => String.fromCharCode(parseInt(h, 16))), c => c.charCodeAt(0));
+      return new TextDecoder(cs).decode(bytes);
+    } catch (_) { return txt; }
+  });
+}
+function mimeParts(raw) {
+  const i = raw.search(/\r?\n\r?\n/);
+  const headText = i < 0 ? raw : raw.slice(0, i), body = i < 0 ? '' : raw.slice(i).replace(/^\r?\n\r?\n/, '');
+  const headers = {};
+  headText.replace(/\r?\n[ \t]+/g, ' ').split(/\r?\n/).forEach(l => { const m = l.match(/^([\w-]+):\s*(.*)$/); if (m) headers[m[1].toLowerCase()] = m[2]; });
+  return { headers, body };
+}
+function decodeBody(body, headers) {
+  const enc = (headers['content-transfer-encoding'] || '').toLowerCase();
+  const cs = ((headers['content-type'] || '').match(/charset="?([^";]+)"?/i) || [, 'utf-8'])[1];
+  let bytes;
+  if (enc === 'base64') { try { bytes = Uint8Array.from(atob(body.replace(/\s+/g, '')), c => c.charCodeAt(0)); } catch (_) { return body; } }
+  else if (enc === 'quoted-printable') bytes = Uint8Array.from(body.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/gi, (m, h) => String.fromCharCode(parseInt(h, 16))), c => c.charCodeAt(0) & 255);
+  else return body;
+  try { return new TextDecoder(cs).decode(bytes); } catch (_) { return new TextDecoder('utf-8').decode(bytes); }
+}
+const htmlToText = h => { const d = document.createElement('div'); d.innerHTML = h.replace(/<(br|\/p|\/div|\/tr)[^>]*>/gi, '\n'); return (d.textContent || '').replace(/\n{3,}/g, '\n\n').trim(); };
+function bodyText(raw) {
+  const { headers, body } = mimeParts(raw);
+  const type = (headers['content-type'] || 'text/plain').toLowerCase();
+  const boundary = (headers['content-type'] || '').match(/boundary="?([^";]+)"?/i);
+  if (/^multipart\//.test(type) && boundary) {
+    const parts = body.split('--' + boundary[1]).slice(1).filter(p => !/^--/.test(p)).map(p => p.replace(/^\r?\n/, ''));
+    const texts = parts.map(p => ({ type: (mimeParts(p).headers['content-type'] || '').toLowerCase(), text: bodyText(p) }));
+    const plain = texts.find(t => /^text\/plain/.test(t.type) && t.text.trim()) || texts.find(t => /^multipart/.test(t.type) && t.text.trim()) || texts.find(t => t.text.trim());
+    return plain ? plain.text : '';
+  }
+  if (/^text\/html/.test(type)) return htmlToText(decodeBody(body, headers));
+  if (/^text\//.test(type) || !headers['content-type']) return decodeBody(body, headers);
+  return '';
+}
+function parseEml(raw) {
+  const { headers } = mimeParts(raw);
+  const d = new Date(headers.date || '');
+  return { from: decodeWords(headers.from), to: decodeWords(headers.to), subject: decodeWords(headers.subject), date: isNaN(d) ? '' : d.toISOString(), body: bodyText(raw).trim() };
+}
+// .msg: an Outlook file (a compound file). Text properties are streams named
+// __substg1.0_<property><type>; 001F is Unicode, 001E is 8-bit text. The sent
+// time is a FILETIME in the __properties_version1.0 stream.
+function parseMsg(buf) {
+  const cfb = XLSX.CFB.read(new Uint8Array(buf), { type: 'array' });
+  const top = e => e && e.name && cfb.FullPaths[cfb.FileIndex.indexOf(e)] && !/__(recip|attach)/i.test(cfb.FullPaths[cfb.FileIndex.indexOf(e)]);
+  const prop = id => {
+    for (const [type, dec] of [['001F', 'utf-16le'], ['001E', 'windows-1252']]) {
+      const e = cfb.FileIndex.find(f => f.name && f.name.toUpperCase() === `__SUBSTG1.0_${id}${type}` && top(f));
+      if (e && e.content) return new TextDecoder(dec).decode(Uint8Array.from(e.content)).replace(/\0+$/, '');
+    }
+    return '';
+  };
+  let date = '';
+  const props = cfb.FileIndex.find(f => f.name === '__properties_version1.0' && top(f));
+  if (props && props.content) {
+    const b = Uint8Array.from(props.content), dv = new DataView(b.buffer);
+    for (let o = 32; o + 16 <= b.length; o += 16) {
+      const tag = dv.getUint32(o, true);
+      if (tag === 0x00390040 || tag === 0x0E060040) {
+        const ft = dv.getUint32(o + 8, true) + dv.getUint32(o + 12, true) * 4294967296;
+        date = new Date(ft / 10000 - 11644473600000).toISOString(); if (tag === 0x00390040) break;
+      }
+    }
+  }
+  const html = prop('1013');
+  const sender = prop('0C1A'), addr = prop('0C1F') || prop('5D01');
+  return { from: sender && addr && !addr.startsWith('/') ? `${sender} <${addr}>` : sender || addr, to: prop('0E04'), subject: prop('0037'), date, body: (prop('1000') || (html ? htmlToText(html) : '')).trim() };
+}
+// Pasted text: picks up From / Sent or Date / Subject lines if they're there.
+function parsePasted(text) {
+  const head = text.split(/\r?\n/).slice(0, 15);
+  const field = re => { const l = head.find(x => re.test(x)); return l ? l.replace(re, '').trim() : ''; };
+  const sent = field(/^(sent|date):\s*/i), d = new Date(sent.replace(/^\w+day,?\s*/i, ''));
+  return { from: field(/^from:\s*/i), to: field(/^to:\s*/i), subject: field(/^subject:\s*/i), date: isNaN(d) ? '' : d.toISOString(), body: text.trim() };
+}
+function addCorrespondence(m) {
+  if (!m.body && !m.subject) { logMsg('warn', `${m.source}: no email text found.`); return; }
+  const key = `${m.date}|${m.subject}|${m.body.slice(0, 200)}`;
+  if (S.correspondence.some(c => `${c.date}|${c.subject}|${c.body.slice(0, 200)}` === key)) { logMsg('ok', `${m.source}: this email is already saved.`); return; }
+  S.correspondence.push({ id: newId(), from: m.from || '', to: m.to || '', subject: m.subject || '', date: m.date || '', body: m.body || '', source: m.source || 'Pasted', added: new Date().toISOString() });
+  S.correspondence.sort((a, b) => String(a.date || a.added).localeCompare(String(b.date || b.added)));
+  logMsg('ok', `${m.source}: email${m.subject ? ` "${m.subject}"` : ''}${m.date ? ` of ${new Date(m.date).toLocaleDateString('en-GB')}` : ''} saved with the workings.`);
+}
+function renderCorrespondence() {
+  const list = S.correspondence || [];
+  out('corrCount', list.length ? `${list.length} saved` : '');
+  $('#corrList').innerHTML = list.map(c => `<details class="pool"><summary style="cursor:pointer;"><b>${esc(c.subject || '(no subject)')}</b>
+      <span class="muted small"> · ${esc(c.from || 'sender not given')} · ${c.date ? esc(new Date(c.date).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })) : 'no date'} · ${esc(c.source)}</span></summary>
+      <div class="prior-text" style="color:var(--ink);max-height:320px;overflow:auto;">${esc(c.body)}</div>
+      <div class="row-actions"><button class="btn link danger" type="button" data-corr-del="${esc(c.id)}">Remove</button></div></details>`).join('');
+}
+$('#corrAdd').onclick = () => {
+  const t = $('#corrPaste').value;
+  if (!t.trim()) { toast('Paste an email first.'); return; }
+  addCorrespondence({ ...parsePasted(t), source: 'Pasted' });
+  $('#corrPaste').value = ''; renderLists(); refresh();
+};
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-corr-del]');
+  if (!t) return;
+  const i = S.correspondence.findIndex(c => c.id === t.dataset.corrDel);
+  if (i < 0) return;
+  const [c] = S.correspondence.splice(i, 1);
+  logMsg('ok', `Email "${c.subject || '(no subject)'}" removed.`);
+  refresh(); toast('Email removed.');
 });
 
 // ── Rates editor ───────────────────────────────────────────────────────────
@@ -3049,11 +3181,13 @@ document.addEventListener('drop', e => { if (!drop.contains(e.target)) { e.preve
 
 async function handleFiles(files) {
   // Workbooks first (they set up last year), then backups (account code), then CSVs.
-  const order = f => /\.xls/i.test(f.name) ? 0 : /\.pdf$/i.test(f.name) ? 1 : /\.json$/i.test(f.name) ? 2 : 3;
+  const order = f => /\.xls/i.test(f.name) ? 0 : /\.pdf$/i.test(f.name) ? 1 : /\.json$/i.test(f.name) ? 2 : /\.(eml|msg)$/i.test(f.name) ? 4 : 3;
   for (const f of files.sort((a, b) => order(a) - order(b))) {
     try {
       if (/\.json$/i.test(f.name)) { const data = JSON.parse(await f.text()); if (data && data.app === 'year-end-tool') restoreYearEndBackup(f.name, data); else importBackup(f.name, data); }
       else if (/\.pdf$/i.test(f.name)) await importPdf(f.name, await f.arrayBuffer());
+      else if (/\.eml$/i.test(f.name)) addCorrespondence({ ...parseEml(await f.text()), source: f.name });
+      else if (/\.msg$/i.test(f.name)) addCorrespondence({ ...parseMsg(await f.arrayBuffer()), source: f.name });
       else if (/\.csv$/i.test(f.name)) importCsv(f.name, csvText(await f.arrayBuffer()));
       else {
         const wb = XLSX.read(await f.arrayBuffer());
@@ -3905,6 +4039,8 @@ $('#exportBtn').onclick = () => {
     at.push([], ['EMAILS']);
     const req = S.email.edited ? S.email.text : composeEmail(), acc = S.email.acc.edited ? S.email.acc.text : composeAccountsEmail();
     at.push(['Information request', S.email.subject || '', req], ['Accounts for approval', S.email.acc.subject || '', acc]);
+    at.push([], ['CLIENT EMAILS', 'Date', 'From · Subject · Text']);
+    (S.correspondence || []).forEach(c => at.push([c.source, c.date ? new Date(c.date).toLocaleString('en-GB') : '', `${c.from} · ${c.subject}\n\n${c.body}`.slice(0, 32000)]));
     XLSX.utils.book_append_sheet(wb, sheetFrom(at, [28, 22, 110]), 'Audit trail'); }
   // The full workings, so the file can be dropped back in. Cells hold at most 32,767 characters.
   const json = JSON.stringify({ ...S, imp: { ...S.imp, log: [] }, rates: hasRates(S.client.taxYear) ? { [S.client.taxYear]: ratesFor(S.client.taxYear) } : {} });
