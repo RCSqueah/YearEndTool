@@ -298,6 +298,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
       <div class="seg" role="group" aria-label="Which email">
         <button type="button" data-emkind="request">Information request</button>
         <button type="button" data-emkind="accounts">Accounts for approval</button>
+        <button type="button" data-emkind="final">Final: accounts and tax return</button>
       </div>
     </div>
     <div class="fields">
@@ -316,6 +317,15 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
           <label class="check"><input type="checkbox" id="em-acc-tax" data-bind="email.acc.includeTax"> Tax due and payment dates</label>
           <label class="check"><input type="checkbox" id="em-acc-uoh" data-bind="email.acc.includeUoh"> Use of Home and capital allowances claimed</label>
           <div class="note info small">Attach the accounts PDF yourself: email links from a web page can't carry attachments.<div class="row-actions" style="margin-top:8px;"><button class="btn" type="button" id="emAccPdf">↓ Download accounts PDF</button></div></div>
+        </div>
+        <div data-emshow="final" style="display:grid;gap:8px;">
+          <h3>Payments on account already made</h3>
+          <div class="fields" style="grid-template-columns:1fr 1fr;">
+            <label class="field"><span data-out="finJanLabel">Paid 31 January</span><input class="num" id="em-fin-jan" data-bind="email.fin.poaJan" inputmode="decimal"></label>
+            <label class="field"><span data-out="finJulLabel">Paid 31 July</span><input class="num" id="em-fin-jul" data-bind="email.fin.poaJul" inputmode="decimal"></label>
+          </div>
+          <span class="hint small muted" data-out="finPoaHint"></span>
+          <div class="note info small">Figures come from the Tax tab. Attach the accounts PDF and the tax return yourself: email links from a web page can't carry attachments.<div class="row-actions" style="margin-top:8px;"><button class="btn" type="button" id="emFinPdf">↓ Download accounts PDF</button></div></div>
         </div>
         <label class="field" style="margin-top:8px;"><span>Your sign-off</span><textarea id="em-sig" rows="3"></textarea><span class="hint">Saved in this browser for every client</span></label>
       </div>
@@ -779,7 +789,8 @@ function blankState() {
     correspondence: [],
     meeting: { date: '', how: 'In person', attendees: '', notes: '', questions: [], answers: {}, received: {}, adj: [], prior: { answers: {}, notes: '', date: '', source: '', sections: [], adj: [], outstanding: [] } },
     email: { kind: 'request', firstName: '', to: '', replyBy: '', includePrior: true, subject: '', text: '', edited: false, off: {},
-      acc: { subject: '', text: '', edited: false, includePrior: true, includeTax: true, includeUoh: true } },
+      acc: { subject: '', text: '', edited: false, includePrior: true, includeTax: true, includeUoh: true },
+      fin: { subject: '', text: '', edited: false, poaJan: '', poaJul: '' } },
     accounts: { xero: [], xeroFile: '', xeroNet: null, map: {}, adj: {}, addTool: null, prior: {}, priorSource: '', approvalDate: '', reportDate: '' },
   };
 }
@@ -1718,7 +1729,39 @@ function composeEmail() {
 }
 
 // The email being edited: the information request, or the accounts for approval.
-const emailDoc = () => (S.email.kind === 'accounts' ? S.email.acc : S.email);
+const emailDoc = () => (S.email.kind === 'accounts' ? S.email.acc : S.email.kind === 'final' ? S.email.fin : S.email);
+// The final email's two payments on account: as entered, or half the total on the Tax tab each.
+function finPoa(st = S) {
+  const f = st.email.fin, total = num(st.tax.poaPaid);
+  const jan = has(f.poaJan) ? num(f.poaJan) : r2(total / 2);
+  const jul = has(f.poaJul) ? num(f.poaJul) : r2(total - (has(f.poaJan) ? num(f.poaJan) : r2(total / 2)));
+  return { jan, jul };
+}
+// Sent once the return is ready: the tax figures, and asks whether to submit.
+function composeFinalEmail(st = S) {
+  const e = st.email, C = compute(st), T = C.tax, ty = st.client.taxYear, y = T.endYear, ny = `${y}/${String(y + 1).slice(2)}`;
+  const first = (e.firstName || String(st.client.name || '').trim().split(/\s+/)[0] || '').trim();
+  const money = v => (v < 0 ? `(${fmt(-v)})` : fmt(v));
+  const { jan, jul } = finPoa(st);
+  const totalDue = r2(T.liability - T.atSource);
+  const due = r2(totalDue - jan - jul), payable = r2(due + T.poa);
+  const rows = [[`Total tax due for ${ty}`, totalDue]];
+  if (jan) rows.push([`Payment on account paid 31 January ${y}`, -jan]);
+  if (jul) rows.push([`Payment on account paid 31 July ${y}`, -jul]);
+  if (jan || jul) rows.push([`Tax ${due < 0 ? 'overpaid' : 'due'} for tax year ${ty}`, due]);
+  if (T.poa) {
+    rows.push([`Payment on account due 31 January ${y + 1} (for ${ny})`, T.poa]);
+    rows.push([`Total ${payable < 0 ? 'overpaid' : 'payable'} on 31 January ${y + 1}`, payable]);
+    rows.push([`Payment on account due 31 July ${y + 1} (for ${ny})`, T.poa]);
+  } else rows.push([`Total ${due < 0 ? 'overpaid' : 'payable'} on 31 January ${y + 1}`, due]);
+  return [
+    `Hi ${first || 'there'},`, '',
+    `Hope you are well. Please find attached your accounts and tax return for the ${ty} tax year (6 April ${y - 1} to 5 April ${y}).`, '',
+    ...rows.map(([l, v]) => `${l}: ${money(v)}`), '',
+    'Please reply to this email if you would like me to submit your return.', '',
+    'Kind regards,', signature(),
+  ].join('\n');
+}
 
 function composeAccountsEmail() {
   const st = S, e = st.email, a = e.acc, C = compute(), F = plFigures(st, C), T = C.tax;
@@ -1756,13 +1799,22 @@ function composeAccountsEmail() {
 }
 
 function renderEmail() {
-  const e = S.email, accMode = e.kind === 'accounts', d = emailDoc();
+  const e = S.email, accMode = e.kind === 'accounts', finMode = e.kind === 'final', d = emailDoc();
+  if (!has(e.fin.subject)) e.fin.subject = `Your ${S.client.taxYear} accounts and tax return`;
   if (!has(e.subject)) e.subject = `Your ${S.client.taxYear} tax return: information needed`;
   if (!has(e.acc.subject)) e.acc.subject = `Your accounts for the year ended ${longDate(S.client.end)}`;
   $$('[data-emkind]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.emkind === e.kind)));
   $$('[data-emshow]').forEach(el => { el.hidden = el.dataset.emshow !== e.kind; });
-  out('emTitle', accMode ? 'Accounts for approval' : 'Information request');
-  out('emIntro', accMode ? 'Sends the accounts with a summary of the profit and the tax due, and asks the client to sign the Client Approval page.'
+  if (finMode) {
+    const y = compute().tax.endYear, total = num(S.tax.poaPaid);
+    out('finJanLabel', `Paid 31 January ${y} £`); out('finJulLabel', `Paid 31 July ${y} £`);
+    const { jan, jul } = finPoa();
+    $('#em-fin-jan').placeholder = String(jan); $('#em-fin-jul').placeholder = String(jul);
+    out('finPoaHint', total ? `Blank boxes use half of the ${fmt(total)} on the Tax tab each.` : 'None entered on the Tax tab. Fill these in if the client made payments on account.');
+  }
+  out('emTitle', finMode ? 'Final: accounts and tax return' : accMode ? 'Accounts for approval' : 'Information request');
+  out('emIntro', finMode ? 'Sends the finished accounts and tax return with the tax due and payment dates, and asks whether to submit the return.'
+    : accMode ? 'Sends the accounts with a summary of the profit and the tax due, and asks the client to sign the Client Approval page.'
     : "Written from last year's workings. Untick anything you don't need to ask about, check the wording, then copy it into an email.");
   const box = (key, title, sub, on, child) => `<label class="check${child ? ' sub' : ''}"><input type="checkbox" data-email-sec="${esc(key)}" ${on ? 'checked' : ''}>
     <span><b>${esc(title)}</b>${sub ? `<br><span class="muted small">${esc(sub)}</span>` : ''}</span></label>`;
@@ -1772,7 +1824,7 @@ function renderEmail() {
     const subs = parts.length > 1 ? `<div class="sec-items"${on ? '' : ' hidden'}>${parts.map(p => box(`${x.key}:${p.id}`, p.label, p.sub, !isOff(`${x.key}:${p.id}`), true)).join('')}</div>` : '';
     return `<div class="sec-group">${box(x.key, x.title, x.summary, on)}${subs}</div>`;
   }).join('');
-  if (!d.edited) d.text = accMode ? composeAccountsEmail() : composeEmail();
+  if (!d.edited) d.text = finMode ? composeFinalEmail() : accMode ? composeAccountsEmail() : composeEmail();
   const body = $('#em-body');
   if (document.activeElement !== body) body.value = d.text;
   $('#emEdited').hidden = !d.edited;
@@ -1802,13 +1854,19 @@ $('#em-sig').addEventListener('input', ev => { try { localStorage.setItem(SIG_KE
 $('#emRebuild').onclick = () => { emailDoc().edited = false; renderEmail(); toast('Email rebuilt from the workings.'); };
 $('#em-subject').addEventListener('input', ev => { emailDoc().subject = ev.target.value; setMailLink(); save(); });
 $('#emAccPdf').onclick = () => $('#accPdfBtn').click();
+$('#emFinPdf').onclick = () => $('#accPdfBtn').click();
+// Payments on account typed here also go on the Tax tab, so the two always agree.
+['#em-fin-jan', '#em-fin-jul'].forEach(sel => $(sel).addEventListener('change', () => {
+  const f = S.email.fin;
+  if (has(f.poaJan) || has(f.poaJul)) { const { jan, jul } = finPoa(); S.tax.poaPaid = String(r2(jan + jul)); bindAll(); refresh(); renderEmail(); }
+}));
 async function copyText(text, el, what) {
   try { await navigator.clipboard.writeText(text); toast(`Copied the ${what}.`); }
   catch (_) { el.focus(); el.select(); toast(`Press Ctrl+C to copy the ${what}.`); }
 }
 // Sending an email marks the stage it belongs to, if not already dated.
 function markEmailSent() {
-  const key = S.email.kind === 'accounts' ? 'sent' : 'requested';
+  const key = S.email.kind === 'request' ? 'requested' : 'sent';
   if (!has(S.progress[key])) { S.progress[key] = ymd(new Date()); bindAll(); refresh(); }
 }
 $('#emCopy').onclick = () => { copyText(emailDoc().text, $('#em-body'), 'email'); markEmailSent(); };
@@ -2456,6 +2514,8 @@ async function buildAuditPdf() {
   kv([['Subject', S.email.subject || '']]); y += 4; para(S.email.edited ? S.email.text : composeEmail(), 8.5);
   h2(`Accounts for approval${S.progress.sent ? ` (sent ${longDate(S.progress.sent)})` : ''}`);
   kv([['Subject', S.email.acc.subject || '']]); y += 4; para(S.email.acc.edited ? S.email.acc.text : composeAccountsEmail(), 8.5);
+  h2('Final: accounts and tax return');
+  kv([['Subject', S.email.fin.subject || `Your ${S.client.taxYear} accounts and tax return`]]); y += 4; para(S.email.fin.edited ? S.email.fin.text : composeFinalEmail(), 8.5);
 
   h1('Client emails');
   if (!(S.correspondence || []).length) para('None saved.', 9, { grey: true });
@@ -4279,7 +4339,8 @@ $('#exportBtn').onclick = () => {
     auditEntries().forEach(e => at.push([e.cls === 'warn' ? 'Check' : '', e.at ? new Date(e.at).toLocaleString('en-GB') : '', e.msg]));
     at.push([], ['EMAILS']);
     const req = S.email.edited ? S.email.text : composeEmail(), acc = S.email.acc.edited ? S.email.acc.text : composeAccountsEmail();
-    at.push(['Information request', S.email.subject || '', req], ['Accounts for approval', S.email.acc.subject || '', acc]);
+    at.push(['Information request', S.email.subject || '', req], ['Accounts for approval', S.email.acc.subject || '', acc],
+      ['Final: accounts and tax return', S.email.fin.subject || '', S.email.fin.edited ? S.email.fin.text : composeFinalEmail()]);
     at.push([], ['CLIENT EMAILS', 'Date', 'From · Subject · Text']);
     (S.correspondence || []).forEach(c => at.push([c.source, c.date ? new Date(c.date).toLocaleString('en-GB') : '', `${c.from} · ${c.subject}\n\n${c.body}`.slice(0, 32000)]));
     XLSX.utils.book_append_sheet(wb, sheetFrom(at, [28, 22, 110]), 'Audit trail'); }
