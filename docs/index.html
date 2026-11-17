@@ -646,6 +646,10 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
     <div class="row-actions"><button class="btn primary" type="button" id="exportBtn">↓ Download Excel workbook</button><span class="muted small" data-out="exportName"></span></div>
   </section>
   <section class="panel" style="margin-top:18px;">
+    <div class="panel-head"><div><h2>Accounts</h2><p class="muted small">The accounts PDF, the same as on the Accounts tab.</p></div></div>
+    <div class="row-actions"><button class="btn primary" type="button" id="exportAccPdf">↓ Download accounts PDF</button></div>
+  </section>
+  <section class="panel" style="margin-top:18px;">
     <div class="panel-head"><div><h2>Audit file</h2><p class="muted small">Everything about this client's year in one readable PDF, for the client file: progress, the files brought in and when, the meeting (notes, checklist, information received and adjustments agreed), the accounts line by line, Use of Home, capital allowances and tax workings with their notes, the tax return figures, the Xero journals, and the emails.</p></div></div>
     <div class="row-actions"><button class="btn primary" type="button" id="auditBtn">↓ Download audit file (PDF)</button><button class="btn" type="button" id="auditPreviewBtn">Preview</button><span class="muted small" data-out="auditName"></span></div>
     <iframe id="auditPreview" title="Audit file preview" hidden style="width:100%;height:760px;border:1px solid var(--rule);border-radius:4px;background:var(--paper);"></iframe>
@@ -665,7 +669,12 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
       <label class="field"><span>Tax rate</span><input id="j-tax" data-bind="journal.taxRate"><span class="hint">As named in Xero</span></label>
     </div>
     <div class="table-wrap"><table><thead><tr><th>Date</th><th>Account</th><th>Description</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead><tbody id="journalTable"></tbody></table></div>
-    <div class="row-actions"><button class="btn primary" type="button" id="journalBtn">↓ Download Xero journals CSV</button><span class="muted small" data-out="journalName"></span></div>
+    <div class="row-actions">
+      <button class="btn" type="button" id="journalUohBtn">↓ Use of Home journal</button>
+      <button class="btn" type="button" id="journalMeetBtn">↓ Meeting adjustments journal</button>
+      <button class="btn primary" type="button" id="journalBtn">↓ Both journals</button>
+    </div>
+    <p class="muted small" style="margin:6px 0 0;">Each is a CSV for Xero → Accounting → Manual journals → Import. The Use of Home journal includes capital allowances when that box is ticked.</p>
   </section>
   <section class="panel" style="margin-top:18px;">
     <details class="rates" id="ratesBox">
@@ -2675,7 +2684,9 @@ $('#ckReset').onclick = () => {
   openChecklistEditor(false); renderLists(); refresh();
   toast('Using the standard list again.');
 };
-const MEET_TYPES = [['paid', 'Paid personally'], ['private', 'Private use'], ['income', 'Income not banked']];
+const MEET_TYPES = [['paid', 'Paid personally'], ['private', 'Private use'], ['income', 'Income not banked'], ['correction', 'Correction']];
+// A correction changes the line by the amount in its own sign: plus adds to it, minus takes off it.
+const isSalesKey = key => (PL_LINES.find(l => l.key === key) || {}).group === 'sales';
 // Account code for a Profit and Loss line: from this client's imported accounts, else the usual code.
 function codeForKey(key) {
   const fromImport = (S.accounts.xero || []).find(x => x.code && plKeyFor(S, x) === key);
@@ -2729,6 +2740,7 @@ function meetingLineEffects(st = S) {
     const amt = num(a.amount);
     if (a.type === 'private') return r2(amt);
     if (a.type === 'income') return r2(amt);
+    if (a.type === 'correction') return isSalesKey(a.key) ? r2(amt) : -r2(amt);
     const biz = has(a.biz) ? Math.min(Math.max(num(a.biz), 0), 100) : 100;
     return -r2(amt * biz / 100);
   });
@@ -2741,7 +2753,7 @@ function meetingEffects(st = S) {
     const amt = num(a.amount);
     let v;
     if (a.type === 'private') v = -amt;
-    else if (a.type === 'income') v = amt;
+    else if (a.type === 'income' || a.type === 'correction') v = amt;
     else v = amt * (has(a.biz) ? Math.min(Math.max(num(a.biz), 0), 100) : 100) / 100;
     out[a.key] = r2((out[a.key] || 0) + v);
   });
@@ -2798,7 +2810,7 @@ document.addEventListener('change', e => {
   if (el.dataset && el.dataset.mtq != null && el.tagName === 'SELECT') { const q = meetingQuestions()[+el.dataset.mtq]; S.meeting.answers[q] = { ...(S.meeting.answers[q] || {}), a: el.value }; save(); }
 });
 $('#mtAddAdj').onclick = () => {
-  S.meeting.adj.push({ date: '', desc: '', key: 'sundry', code: '', type: 'paid', amount: '', biz: '100' });
+  S.meeting.adj.push({ date: S.client.end || '', desc: '', key: 'sundry', code: '', type: 'paid', amount: '', biz: '100' });
   renderLists(); refresh(); const el = $(`#mta-w-${S.meeting.adj.length - 1}`); if (el) el.focus();
 };
 const mileageAmount = miles => r2(Math.min(miles, 10000) * 0.45 + Math.max(0, miles - 10000) * 0.25);
@@ -3302,7 +3314,7 @@ function applyDest(it, c) {
   }
   // Accounts: an adjustment on the Meeting tab (goes into the accounts and the manual journal).
   const type = kind === 'inc' ? 'income' : it.adjType === 'private' ? 'private' : 'paid';
-  S.meeting.adj.push({ date: c.date ? ymd(new Date(c.date)) : '', desc: `${it.description} (client email)`, key: a, code: '', type, amount: String(annual(it)), biz: type === 'paid' ? String(it.bizPct ?? 100) : '100' });
+  S.meeting.adj.push({ date: S.client.end || '', desc: `${it.description} (client email${c.date ? ` ${emailDate(c)}` : ''})`, key: a, code: '', type, amount: String(annual(it)), biz: type === 'paid' ? String(it.bizPct ?? 100) : '100' });
   return `Accounts ${(PL_LINES.find(l => l.key === a) || {}).label || a}: ${it.description} ${fmt(annual(it))} (${(MEET_TYPES.find(t => t[0] === type) || [, ''])[1].toLowerCase()})`;
 }
 function renderFound(c) {
@@ -4220,6 +4232,8 @@ function journalLines(C = compute()) {
         lines.push({ code: '980', desc: d, amount: amt });
       } else if (a.type === 'income') {
         lines.push({ code, desc: tag(`${a.desc || 'Income'}${when}`, /not banked|unbanked|cash/i, 'not banked'), amount: -amt });
+      } else if (a.type === 'correction') {
+        lines.push({ code, desc: tag(`${a.desc || 'Correction'}${when}`, /correct/i, 'correction'), amount: isSalesKey(a.key) ? -amt : amt });
       } else {
         const biz = has(a.biz) ? Math.min(Math.max(num(a.biz), 0), 100) : 100;
         lines.push({ code, desc: `${tag(`${a.desc || 'Expense'}${when}`, /personal|paid by|mileage/i, 'paid personally')}${biz < 100 ? ` @ ${biz}% business use` : ''}`, amount: r2(amt * biz / 100) });
@@ -4230,19 +4244,27 @@ function journalLines(C = compute()) {
   return { date, journals, taxRate: J.taxRate || 'No VAT' };
 }
 function journalFileName() { return exportFileName().replace('_YE_', '_Xero_Journals_').replace(/\.xlsx$/, '.csv'); }
-$('#journalBtn').onclick = () => {
+// which: 'uoh' (Use of Home and capital allowances), 'meeting', or both.
+function downloadJournals(which) {
   const J = journalLines();
-  if (!J.journals.length) { toast('There is nothing to post yet.'); return; }
+  const pick = j => which === 'uoh' ? !/^Meeting/.test(j.narration) : which === 'meeting' ? /^Meeting/.test(j.narration) : true;
+  const journals = J.journals.filter(pick);
+  if (!journals.length) { toast(which === 'meeting' ? 'There are no meeting adjustments to post.' : which === 'uoh' ? 'There is no Use of Home or capital allowances journal to post.' : 'There is nothing to post yet.'); return; }
+  const name = which === 'uoh' ? journalFileName().replace('_Xero_Journals_', '_Xero_Journal_UseOfHome_') : which === 'meeting' ? journalFileName().replace('_Xero_Journals_', '_Xero_Journal_Meeting_') : journalFileName();
   const q = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
-  const rows = J.journals.flatMap(j => j.lines.map(l => [j.narration, J.date, l.desc, l.code, J.taxRate, l.amount.toFixed(2), '', '', '', ''].map(q).join(',')));
+  const rows = journals.flatMap(j => j.lines.map(l => [j.narration, J.date, l.desc, l.code, J.taxRate, l.amount.toFixed(2), '', '', '', ''].map(q).join(',')));
   const csv = ['*Narration,*Date,Description,*AccountCode,*TaxRate,*Amount,TrackingName1,TrackingOption1,TrackingName2,TrackingOption2'].concat(rows).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
-  a.download = journalFileName();
+  a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast('Downloaded ' + journalFileName());
-};
+  toast('Downloaded ' + name);
+}
+$('#journalBtn').onclick = () => downloadJournals('both');
+$('#journalUohBtn').onclick = () => downloadJournals('uoh');
+$('#journalMeetBtn').onclick = () => downloadJournals('meeting');
+$('#exportAccPdf').onclick = () => $('#accPdfBtn').click();
 
 $('#exportBtn').onclick = () => {
   const C = compute(); const { uoh, ca, tax } = C;
