@@ -2181,7 +2181,7 @@ function importTaxReturn(name, pages, lines) {
   }
   // No client yet: set one up for the year after this return.
   if (!S.client.name && yr) {
-    // The first page has the UTR followed by the name, e.g. "1234567890 J SMITH".
+    // The first page has the 10-digit UTR followed by the name, e.g. "1234567890 J SMITH".
     const raw = ((lines[0] || []).map(l => l.match(/^\d{10}\s+([A-Za-z][A-Za-z .'-]+)$/)).find(Boolean) || [])[1] || '';
     if (raw) S.client.name = raw.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
     S.client.start = `${yr[2]}-04-06`; S.client.end = `${Number(yr[2]) + 1}-04-05`; S.client.taxYear = nextTaxYear(retYear);
