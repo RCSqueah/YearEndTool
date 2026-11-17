@@ -4608,7 +4608,8 @@ renderLists();
 renderRates();
 refresh();
 folderInit();
-try { const t = sessionStorage.getItem('yearEnd:tab'); if (t) showTab(t); } catch (_) {}
+// Opens on the Clients tab; a reload in the same browser tab stays where you were.
+showTab((() => { try { return sessionStorage.getItem('yearEnd:tab'); } catch (_) { return null; } })() || 'clients');
 </script>
 </body>
 </html>
