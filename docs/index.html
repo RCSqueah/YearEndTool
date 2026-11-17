@@ -154,6 +154,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
 
 <div class="strip">
   <div class="wrap">
+    <div class="note warn small" id="folderBanner" hidden style="margin:0 0 10px;">The shared folder needs reconnecting before you see your team's latest work. <button class="btn" type="button" id="folderBannerBtn">Reconnect folder</button></div>
     <header class="top">
       <h1>Year End Workings</h1>
       <div class="row-actions">
@@ -198,6 +199,16 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
       <tbody id="clientsTable"></tbody>
     </table></div>
   </section>
+  <section class="panel" id="folderPanel">
+    <div class="panel-head"><div><h2>Shared folder</h2><p class="muted small">Keep every client in a folder your team shares, such as a OneDrive folder synced to each computer. Each client and tax year is one file, so everyone sees the same list. Needs Chrome or Edge on a computer.</p></div><span class="chip" data-out="folderChip"></span></div>
+    <p class="small" data-out="folderStatus" style="margin:0 0 10px;"></p>
+    <div class="row-actions">
+      <button class="btn primary" type="button" id="folderPick">Choose shared folder</button>
+      <button class="btn primary" type="button" id="folderReconnect" hidden>Reconnect folder</button>
+      <button class="btn" type="button" id="folderRefresh" hidden>Refresh list</button>
+      <button class="btn link danger" type="button" id="folderStop" hidden>Stop using this folder</button>
+    </div>
+  </section>
   <section class="panel">
     <div class="panel-head"><div><h2>Backup</h2><p class="muted small">Clearing the browser's data deletes every client saved here. Back up now and then, or to move your clients to another computer or browser.</p></div></div>
     <div class="row-actions">
@@ -212,7 +223,7 @@ details.rates summary { cursor: pointer; font: 600 15px var(--font-display); }
 <div data-pane="client">
   <div class="stack">
   <section class="panel">
-    <div class="panel-head"><h2>Client</h2><span class="muted small">Saved in this browser as you type</span></div>
+    <div class="panel-head"><h2>Client</h2><span class="muted small">Saved as you type</span></div>
     <div class="fields">
       <label class="field"><span>Client name</span><input id="f-name" data-bind="client.name"></label>
       <label class="field"><span>Period start</span><input id="f-start" type="date" data-bind="client.start"></label>
@@ -813,7 +824,7 @@ const lsWrite = (k, v) => { try { localStorage.setItem(k, v); return true; } cat
 function readIndex() { try { return JSON.parse(lsRead(INDEX_KEY) || '[]') || []; } catch (_) { return []; } }
 function writeIndex(list) { lsWrite(INDEX_KEY, JSON.stringify(list)); }
 function loadRecord(id) {
-  const raw = lsRead(recordKey(id));
+  const raw = lsRead(recordKey(id)) || (FOLDER.cache.get(id) || null);
   if (!raw) return null;
   try { const st = migrate(JSON.parse(raw)); st.id = id; return st; }
   catch (e) {
@@ -848,13 +859,18 @@ function clientSummary(st) {
 function writeRecord(st) {
   if (!st.id) st.id = newId();
   // Only a real change moves the "last saved" time, so opening a client doesn't make it look newer than a colleague's copy.
-  const prev = (() => { try { return JSON.parse(lsRead(recordKey(st.id)) || 'null'); } catch (_) { return null; } })();
+  const prev = (() => { try { return JSON.parse(lsRead(recordKey(st.id)) || FOLDER.cache.get(st.id) || 'null'); } catch (_) { return null; } })();
   const same = prev && prev.savedAt && JSON.stringify({ ...prev, savedAt: '' }) === JSON.stringify({ ...st, savedAt: '' });
   st.savedAt = same ? prev.savedAt : new Date().toISOString();
-  const ok = same ? true : lsWrite(recordKey(st.id), JSON.stringify(st));
-  const idx = readIndex().filter(e => e.id !== st.id);
-  if (has(st.client.name)) idx.push(clientSummary(st));
+  const json = JSON.stringify(st);
+  let ok = same && lsRead(recordKey(st.id)) ? true : lsWrite(recordKey(st.id), json);
+  const old = readIndex(), was = old.find(e => e.id === st.id), idx = old.filter(e => e.id !== st.id);
+  if (has(st.client.name)) idx.push({ ...clientSummary(st), shared: !!(was && was.shared) });
   writeIndex(idx);
+  if (FOLDER.ok && has(st.client.name)) {
+    if (!same || !FOLDER.files.has(st.id)) folderQueue(st.id, json);
+    if (!ok) { FOLDER.cache.set(st.id, json); ok = true; } // the folder holds it; the browser copy was full
+  }
   return ok;
 }
 function saveNow() {
@@ -1433,7 +1449,7 @@ function showTab(name) {
   $$('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== name; });
   try { sessionStorage.setItem('yearEnd:tab', name); } catch (_) {}
   if (name === 'email') renderEmail();
-  if (name === 'clients') { saveNow(); renderClients(); }
+  if (name === 'clients') { saveNow(); renderClients(); renderFolder(); folderSync(); }
 }
 
 function calcRow(label, val, cls = '', prior) {
@@ -2959,7 +2975,204 @@ function newClient() {
 }
 const clientKeyOf = (name, year) => `${String(name || '').trim().toLowerCase().replace(/\s+/g, ' ')}|${year}`;
 const sameRecord = (row, c) => has(row.name) && clientKeyOf(row.name, row.taxYear) === clientKeyOf(c.name, c.taxYear);
+// ── Shared folder (e.g. OneDrive) ──────────────────────────────────────────
+// Each client and tax year is one file, "<Name> <2025-26>.yearend.json", in a folder
+// the team shares. The browser keeps its own copy as before; the folder is kept in
+// step with it. Newer saves win. If a colleague saved a client after this browser
+// last read it, and this browser then saves it too, their copy is kept in the
+// "Conflicts" subfolder so nothing is lost. Deleted clients move to "Deleted".
+const FOLDER = { handle: null, ok: false, saved: false, cache: new Map(), files: new Map(), pending: new Map(), timer: null, syncing: null, lastSync: 0, note: '' };
+const FILE_EXT = '.yearend.json';
+const folderSupported = () => typeof window.showDirectoryPicker === 'function';
+const fileNameFor = st => `${String(st.client.name || 'Client').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim()} ${String(st.client.taxYear).replace('/', '-')}${FILE_EXT}`;
+// The chosen folder is remembered in this browser (IndexedDB holds the folder handle).
+function idb(mode, fn) {
+  return new Promise((resolve, reject) => {
+    const r = indexedDB.open('yearEndTool', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onerror = () => reject(r.error);
+    r.onsuccess = () => { try { const tx = r.result.transaction('kv', mode), q = fn(tx.objectStore('kv')); tx.oncomplete = () => resolve(q && q.result); tx.onerror = () => reject(tx.error); } catch (e) { reject(e); } };
+  });
+}
+const idbGet = k => idb('readonly', st => st.get(k)).catch(() => null);
+const idbSet = (k, v) => idb('readwrite', st => (v == null ? st.delete(k) : st.put(v, k))).catch(() => null);
+async function folderPermission(h, ask) {
+  if (!h.queryPermission) return 'granted';
+  let p = await h.queryPermission({ mode: 'readwrite' });
+  if (p !== 'granted' && ask) p = await h.requestPermission({ mode: 'readwrite' });
+  return p;
+}
+async function readJsonFile(fh) { const t = await (await fh.getFile()).text(); return { raw: t, st: JSON.parse(t) }; }
+async function writeFile(dir, name, text) { const fh = await dir.getFileHandle(name, { create: true }); const w = await fh.createWritable(); await w.write(text); await w.close(); }
+const stamp = () => new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '-');
+async function parkCopy(sub, name, raw) {
+  const d = await FOLDER.handle.getDirectoryHandle(sub, { create: true });
+  await writeFile(d, name.replace(FILE_EXT, ` (${stamp()})${FILE_EXT}`), raw);
+}
+async function folderConnect(handle, ask) {
+  const p = await folderPermission(handle, ask);
+  FOLDER.handle = handle; FOLDER.saved = true;
+  if (p !== 'granted') { FOLDER.ok = false; renderFolder(); return false; }
+  FOLDER.ok = true; idbSet('folder', handle);
+  await folderSync(true);
+  return true;
+}
+// Read every client file and bring the browser and the folder into step.
+function folderSync(force) {
+  if (!FOLDER.ok) return Promise.resolve();
+  if (FOLDER.syncing) return FOLDER.syncing;
+  if (!force && Date.now() - FOLDER.lastSync < 15000) return Promise.resolve();
+  FOLDER.syncing = (async () => {
+    try {
+      await folderFlush();
+      saveNow();
+      const disk = [];
+      for await (const [name, h] of FOLDER.handle.entries()) {
+        if (h.kind !== 'file' || !name.endsWith(FILE_EXT)) continue;
+        try { const { raw, st } = await readJsonFile(h); if (st && st.client && st.id) disk.push({ name, raw, st }); }
+        catch (e) { console.error(e); }
+      }
+      let idx = readIndex(), took = 0, sent = 0, gone = 0, reopen = false;
+      const matched = new Set();
+      for (const d of disk) {
+        const e = idx.find(x => x.id === d.st.id) || idx.find(x => sameRecord(x, d.st.client));
+        const localRaw = e && lsRead(recordKey(e.id));
+        const local = localRaw ? JSON.parse(localRaw) : null;
+        FOLDER.files.set(d.st.id, { name: d.name, savedAt: d.st.savedAt });
+        FOLDER.cache.set(d.st.id, d.raw);
+        if (e) matched.add(e.id);
+        matched.add(d.st.id);
+        if (local && local.savedAt && d.st.savedAt && local.savedAt > d.st.savedAt) {
+          // This browser has the newer copy: send it to the folder (under the folder's file).
+          if (e.id !== d.st.id) FOLDER.files.set(e.id, { name: d.name, savedAt: d.st.savedAt, twin: d.st.id });
+          folderQueue(e.id, localRaw); sent++;
+          continue;
+        }
+        if (local && local.savedAt === d.st.savedAt && e.id === d.st.id) { idx = idx.map(x => (x.id === e.id ? { ...x, shared: true } : x)); continue; }
+        // The folder's copy is newer (or only in the folder): use it, and drop any unsaved write of the older copy.
+        FOLDER.pending.delete(d.st.id); if (e) FOLDER.pending.delete(e.id);
+        if (e && e.id !== d.st.id) { try { localStorage.removeItem(recordKey(e.id)); } catch (_) {} idx = idx.filter(x => x.id !== e.id); if (S.id === e.id) reopen = d.st.id; }
+        if (local) { try { localStorage.removeItem(recordKey(d.st.id)); } catch (_) {} took++; }
+        else if (!e) took++;
+        if (S.id === d.st.id && local) reopen = d.st.id;
+        let sum; try { sum = clientSummary(migrate(JSON.parse(d.raw))); } catch (_) { continue; }
+        idx = idx.filter(x => x.id !== d.st.id).concat({ ...sum, id: d.st.id, shared: true });
+      }
+      // In the browser but not the folder: copy it in, unless a colleague deleted it from the folder.
+      for (const e of idx.slice()) {
+        if (matched.has(e.id)) continue;
+        if (e.shared && e.id !== S.id) { try { localStorage.removeItem(recordKey(e.id)); } catch (_) {} idx = idx.filter(x => x.id !== e.id); FOLDER.cache.delete(e.id); gone++; continue; }
+        const raw = lsRead(recordKey(e.id));
+        if (raw) { folderQueue(e.id, raw); sent++; }
+      }
+      writeIndex(idx);
+      if (reopen) { const st = loadRecord(reopen); if (st) { S = st; lsWrite(CURRENT_KEY, S.id); renderAll(); toast(`Updated ${S.client.name || 'this client'} with the latest from the shared folder.`); } }
+      await folderFlush();
+      FOLDER.lastSync = Date.now();
+      FOLDER.note = `Up to date ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}: ${disk.length} client file${disk.length !== 1 ? 's' : ''} in the folder${took ? `, ${took} brought in` : ''}${sent ? `, ${sent} saved to it` : ''}${gone ? `, ${gone} removed (deleted by a colleague)` : ''}.`;
+    } catch (e) {
+      console.error(e);
+      FOLDER.note = `Couldn't read the shared folder (${e.message}). Your work is still saved in this browser.`;
+      if (/permission|NotAllowed/i.test(e.name + e.message)) { FOLDER.ok = false; }
+    } finally {
+      FOLDER.syncing = null; renderFolder(); renderClients(); renderClientPicker();
+    }
+  })();
+  return FOLDER.syncing;
+}
+function folderQueue(id, json) {
+  FOLDER.pending.set(id, json);
+  clearTimeout(FOLDER.timer);
+  FOLDER.timer = setTimeout(() => folderFlush(), 800);
+}
+async function folderFlush() {
+  clearTimeout(FOLDER.timer);
+  if (!FOLDER.ok) return;
+  const jobs = [...FOLDER.pending]; FOLDER.pending.clear();
+  for (const [id, json] of jobs) {
+    try { await folderWrite(id, json); }
+    catch (e) { console.error(e); FOLDER.note = `Couldn't save to the shared folder (${e.message}). Your work is still saved in this browser.`; renderFolder(); }
+  }
+}
+async function folderWrite(id, json) {
+  const st = JSON.parse(json);
+  if (!has(st.client.name)) return;
+  const known = FOLDER.files.get(id);
+  // Windows and OneDrive ignore capitals in file names: reuse the existing file's spelling.
+  let name = fileNameFor(st);
+  const same = [...FOLDER.files.values()].find(f => f.name.toLowerCase() === name.toLowerCase());
+  if (same) name = same.name;
+  let disk = null;
+  try { disk = await readJsonFile(await FOLDER.handle.getFileHandle(name)); } catch (_) {}
+  if (disk && disk.st.savedAt === st.savedAt && disk.st.id === id) { FOLDER.files.set(id, { name, savedAt: st.savedAt }); return; }
+  if (disk) {
+    const seen = known && known.name === name ? known.savedAt : null;
+    if (disk.st.savedAt !== seen) {
+      // Changed by someone else since this browser last read it.
+      if (!seen && disk.st.savedAt > st.savedAt) { FOLDER.lastSync = 0; return; } // theirs is newer: the next refresh brings it in
+      await parkCopy('Conflicts', name, disk.raw);
+      toast(`${st.client.name} ${st.client.taxYear} was also changed elsewhere. Your version is saved; the other copy is in the shared folder's Conflicts folder.`);
+      logMsg('warn', `${st.client.name} ${st.client.taxYear}: also changed on another computer. The other copy was kept in the shared folder's Conflicts folder.`);
+    }
+  }
+  await writeFile(FOLDER.handle, name, json);
+  FOLDER.files.set(id, { name, savedAt: st.savedAt });
+  FOLDER.cache.set(id, json);
+  if (disk && disk.st.id !== id) FOLDER.files.delete(disk.st.id);
+  // Renamed client: remove the old file (if it is this client's).
+  if (known && known.name !== name) {
+    try { const old = await readJsonFile(await FOLDER.handle.getFileHandle(known.name)); if (old.st.id === id || old.st.id === known.twin) await FOLDER.handle.removeEntry(known.name); } catch (_) {}
+  }
+  writeIndex(readIndex().map(e => (e.id === id ? { ...e, shared: true } : e)));
+}
+async function folderDelete(id) {
+  const f = FOLDER.files.get(id);
+  FOLDER.files.delete(id); FOLDER.cache.delete(id); FOLDER.pending.delete(id);
+  if (!FOLDER.ok || !f) return;
+  try { const { raw } = await readJsonFile(await FOLDER.handle.getFileHandle(f.name)); await parkCopy('Deleted', f.name, raw); await FOLDER.handle.removeEntry(f.name); }
+  catch (e) { console.error(e); }
+}
+function renderFolder() {
+  const sup = folderSupported() || FOLDER.handle;
+  $('#folderPick').hidden = !sup || FOLDER.ok || (FOLDER.saved && !FOLDER.ok);
+  $('#folderReconnect').hidden = !(FOLDER.saved && !FOLDER.ok);
+  $('#folderRefresh').hidden = !FOLDER.ok;
+  $('#folderStop').hidden = !FOLDER.saved;
+  $('#folderBanner').hidden = !(FOLDER.saved && !FOLDER.ok);
+  out('folderChip', FOLDER.ok ? 'Connected' : FOLDER.saved ? 'Not connected' : '');
+  out('folderStatus', !sup ? "This browser can't use a shared folder. Use Chrome or Edge on a computer."
+    : FOLDER.ok ? `Using the folder <b>${esc(FOLDER.handle.name)}</b>. Changes save there as you work, and the list refreshes when you come back to this page. ${esc(FOLDER.note)}`
+    : FOLDER.saved ? `The folder <b>${esc(FOLDER.handle.name)}</b> needs reconnecting (the browser asks again after it restarts). Your work is still saved in this browser.`
+    : 'Not set up. Choose the shared OneDrive folder (synced to this computer) to start. Clients already in this browser are copied into it.');
+}
+async function folderInit() {
+  const h = await idbGet('folder');
+  if (h) { FOLDER.handle = h; FOLDER.saved = true; try { await folderConnect(h, false); } catch (e) { console.error(e); } }
+  renderFolder();
+}
+$('#folderPick').onclick = async () => {
+  if (!folderSupported()) { toast("This browser can't use a shared folder. Use Chrome or Edge."); return; }
+  let h; try { h = await window.showDirectoryPicker({ id: 'yearEndTool', mode: 'readwrite' }); } catch (_) { return; }
+  if (await folderConnect(h, true)) toast(`Using the shared folder ${h.name}.`);
+};
+const reconnect = async () => { if (FOLDER.handle && await folderConnect(FOLDER.handle, true)) toast('Shared folder reconnected.'); };
+$('#folderReconnect').onclick = reconnect;
+$('#folderBannerBtn').onclick = reconnect;
+$('#folderRefresh').onclick = () => folderSync(true).then(() => toast('Client list refreshed from the shared folder.'));
+$('#folderStop').onclick = async () => {
+  await folderFlush();
+  // Keep a browser copy of every client before letting go of the folder.
+  readIndex().forEach(e => { if (!lsRead(recordKey(e.id)) && FOLDER.cache.has(e.id)) lsWrite(recordKey(e.id), FOLDER.cache.get(e.id)); });
+  writeIndex(readIndex().map(e => ({ ...e, shared: false })));
+  Object.assign(FOLDER, { handle: null, ok: false, saved: false, note: '' }); FOLDER.files.clear(); FOLDER.cache.clear();
+  await idbSet('folder', null);
+  renderFolder(); renderClients(); toast('Stopped using the shared folder. Everything is still saved in this browser.');
+};
+window.addEventListener('focus', () => { if (FOLDER.ok) folderSync(); });
+window.addEventListener('beforeunload', () => { if (FOLDER.pending.size) folderFlush(); });
+
 function deleteClient(id) {
+  folderDelete(id);
   try { localStorage.removeItem(recordKey(id)); } catch (_) {}
   writeIndex(readIndex().filter(e => e.id !== id));
   if (id === S.id) {
@@ -4394,6 +4607,7 @@ S = load();
 renderLists();
 renderRates();
 refresh();
+folderInit();
 try { const t = sessionStorage.getItem('yearEnd:tab'); if (t) showTab(t); } catch (_) {}
 </script>
 </body>
