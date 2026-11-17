@@ -2684,9 +2684,8 @@ $('#ckReset').onclick = () => {
   openChecklistEditor(false); renderLists(); refresh();
   toast('Using the standard list again.');
 };
+// A correction is recorded with the meeting only: it doesn't change the accounts or the journal.
 const MEET_TYPES = [['paid', 'Paid personally'], ['private', 'Private use'], ['income', 'Income not banked'], ['correction', 'Correction']];
-// A correction changes the line by the amount in its own sign: plus adds to it, minus takes off it.
-const isSalesKey = key => (PL_LINES.find(l => l.key === key) || {}).group === 'sales';
 // Account code for a Profit and Loss line: from this client's imported accounts, else the usual code.
 function codeForKey(key) {
   const fromImport = (S.accounts.xero || []).find(x => x.code && plKeyFor(S, x) === key);
@@ -2740,7 +2739,7 @@ function meetingLineEffects(st = S) {
     const amt = num(a.amount);
     if (a.type === 'private') return r2(amt);
     if (a.type === 'income') return r2(amt);
-    if (a.type === 'correction') return isSalesKey(a.key) ? r2(amt) : -r2(amt);
+    if (a.type === 'correction') return 0;
     const biz = has(a.biz) ? Math.min(Math.max(num(a.biz), 0), 100) : 100;
     return -r2(amt * biz / 100);
   });
@@ -2749,11 +2748,11 @@ function meetingLineEffects(st = S) {
 function meetingEffects(st = S) {
   const out = {};
   (st.meeting.adj || []).forEach(a => {
-    if (!a.key) return;
+    if (!a.key || a.type === 'correction') return;
     const amt = num(a.amount);
     let v;
     if (a.type === 'private') v = -amt;
-    else if (a.type === 'income' || a.type === 'correction') v = amt;
+    else if (a.type === 'income') v = amt;
     else v = amt * (has(a.biz) ? Math.min(Math.max(num(a.biz), 0), 100) : 100) / 100;
     out[a.key] = r2((out[a.key] || 0) + v);
   });
@@ -4223,7 +4222,7 @@ function journalLines(C = compute()) {
     // Say what kind of adjustment it is, unless the description already does.
     const tag = (d, re, words) => (re.test(d) ? d : `${d} - ${words}`);
     S.meeting.adj.forEach(a => {
-      const amt = r2(num(a.amount)); if (!amt) return;
+      const amt = r2(num(a.amount)); if (!amt || a.type === 'correction') return;
       const code = String(a.code || codeForKey(a.key) || '').trim() || '?';
       const when = has(a.date) ? ` (${ukDate(a.date)})` : '';
       if (a.type === 'private') {
@@ -4232,8 +4231,6 @@ function journalLines(C = compute()) {
         lines.push({ code: '980', desc: d, amount: amt });
       } else if (a.type === 'income') {
         lines.push({ code, desc: tag(`${a.desc || 'Income'}${when}`, /not banked|unbanked|cash/i, 'not banked'), amount: -amt });
-      } else if (a.type === 'correction') {
-        lines.push({ code, desc: tag(`${a.desc || 'Correction'}${when}`, /correct/i, 'correction'), amount: isSalesKey(a.key) ? -amt : amt });
       } else {
         const biz = has(a.biz) ? Math.min(Math.max(num(a.biz), 0), 100) : 100;
         lines.push({ code, desc: `${tag(`${a.desc || 'Expense'}${when}`, /personal|paid by|mileage/i, 'paid personally')}${biz < 100 ? ` @ ${biz}% business use` : ''}`, amount: r2(amt * biz / 100) });
