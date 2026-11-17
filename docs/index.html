@@ -847,8 +847,11 @@ function clientSummary(st) {
 }
 function writeRecord(st) {
   if (!st.id) st.id = newId();
-  st.savedAt = new Date().toISOString();
-  const ok = lsWrite(recordKey(st.id), JSON.stringify(st));
+  // Only a real change moves the "last saved" time, so opening a client doesn't make it look newer than a colleague's copy.
+  const prev = (() => { try { return JSON.parse(lsRead(recordKey(st.id)) || 'null'); } catch (_) { return null; } })();
+  const same = prev && prev.savedAt && JSON.stringify({ ...prev, savedAt: '' }) === JSON.stringify({ ...st, savedAt: '' });
+  st.savedAt = same ? prev.savedAt : new Date().toISOString();
+  const ok = same ? true : lsWrite(recordKey(st.id), JSON.stringify(st));
   const idx = readIndex().filter(e => e.id !== st.id);
   if (has(st.client.name)) idx.push(clientSummary(st));
   writeIndex(idx);
@@ -1754,15 +1757,21 @@ function composeFinalEmail(st = S) {
   const { jan, jul } = finPoa(st);
   const totalDue = r2(T.liability - T.atSource);
   const due = r2(totalDue - jan - jul), payable = r2(due + T.poa);
-  const rows = [[`Total tax due for ${ty}`, totalDue]];
-  if (jan) rows.push([`Payment on account paid 31 January ${y}`, -jan]);
-  if (jul) rows.push([`Payment on account paid 31 July ${y}`, -jul]);
-  if (jan || jul) rows.push([`Tax ${due < 0 ? 'overpaid' : 'due'} for tax year ${ty}`, due]);
-  if (T.poa) {
-    rows.push([`Payment on account due 31 January ${y + 1} (for ${ny})`, T.poa]);
-    rows.push([`Total ${payable < 0 ? 'overpaid' : 'payable'} on 31 January ${y + 1}`, payable]);
-    rows.push([`Payment on account due 31 July ${y + 1} (for ${ny})`, T.poa]);
-  } else rows.push([`Total ${due < 0 ? 'overpaid' : 'payable'} on 31 January ${y + 1}`, due]);
+  let rows;
+  if (!jan && !jul && !T.poa) {
+    // No payments on account paid or due: just the one figure.
+    rows = [[due < 0 ? `Tax overpaid for ${ty}` : `Tax due by 31 January ${y + 1}`, due]];
+  } else {
+    rows = [[`Total tax due for ${ty}`, totalDue]];
+    if (jan) rows.push([`Payment on account paid 31 January ${y}`, -jan]);
+    if (jul) rows.push([`Payment on account paid 31 July ${y}`, -jul]);
+    if (jan || jul) rows.push([`Tax ${due < 0 ? 'overpaid' : 'due'} for tax year ${ty}`, due]);
+    if (T.poa) {
+      rows.push([`Payment on account due 31 January ${y + 1} (for ${ny})`, T.poa]);
+      rows.push([`Total ${payable < 0 ? 'overpaid' : 'payable'} on 31 January ${y + 1}`, payable]);
+      rows.push([`Payment on account due 31 July ${y + 1} (for ${ny})`, T.poa]);
+    } else rows.push([`Total ${due < 0 ? 'overpaid' : 'payable'} on 31 January ${y + 1}`, due]);
+  }
   return [
     `Hi ${first || 'there'},`, '',
     `Hope you are well. Please find attached your accounts and tax return for the ${ty} tax year (6 April ${y - 1} to 5 April ${y}).`, '',
@@ -2948,6 +2957,8 @@ function newClient() {
   const el = $('#f-name'); if (el) el.focus();
   toast('New client: enter a name, or drop in last year\'s files.');
 }
+const clientKeyOf = (name, year) => `${String(name || '').trim().toLowerCase().replace(/\s+/g, ' ')}|${year}`;
+const sameRecord = (row, c) => has(row.name) && clientKeyOf(row.name, row.taxYear) === clientKeyOf(c.name, c.taxYear);
 function deleteClient(id) {
   try { localStorage.removeItem(recordKey(id)); } catch (_) {}
   writeIndex(readIndex().filter(e => e.id !== id));
@@ -2981,10 +2992,12 @@ $('#newClientBtn').onclick = newClient;
 function renderClients() {
   const rows = clientRows();
   const cell = v => (has(v) ? `<span class="chip">${esc(shortDate(v))}</span>` : '<span class="muted">–</span>');
+  const counts = {}; rows.forEach(r => { const k = clientKeyOf(r.name, r.taxYear); counts[k] = (counts[k] || 0) + 1; });
+  const saved = r => (r.updated ? new Date(r.updated).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'unknown');
   $('#clientsTable').innerHTML = rows.map(r => {
     const pg = r.progress || {}, step = nextStepOf(pg);
     return `<tr${r.id === S.id ? ' class="key"' : ''}>
-      <td><button class="btn link" type="button" data-open-client="${esc(r.id)}">${esc(r.name)}</button></td><td>${esc(r.taxYear)}</td>
+      <td><button class="btn link" type="button" data-open-client="${esc(r.id)}">${esc(r.name)}</button>${counts[clientKeyOf(r.name, r.taxYear)] > 1 ? `<br><span class="chip warn" title="Two records for the same client and year. Open each, keep the right one and delete the other.">Duplicate · saved ${esc(saved(r))}</span>` : ''}</td><td>${esc(r.taxYear)}</td>
       ${STAGES.map(([k]) => `<td>${cell(pg[k])}</td>`).join('')}
       <td style="white-space:nowrap;">${step ? esc(step) : '<span class="chip">Complete</span>'}</td>
       <td class="n">${r.taxable != null ? fmt0(r.taxable) : '–'}</td><td class="n">${r.jan != null ? fmt0(r.jan) : '–'}</td>
@@ -3021,9 +3034,13 @@ function restoreYearEndBackup(name, data) {
   saveNow();
   let added = 0, updated = 0, kept = 0;
   (data.clients || []).forEach(raw => {
-    const st = migrate(raw), mine = loadRecord(st.id);
+    const st = migrate(raw);
+    // The same client and year saved under another id (e.g. set up by a colleague) is the same record: keep the newer one only.
+    const twin = readIndex().find(e => e.id !== st.id && sameRecord(e, st.client));
+    const mine = loadRecord(st.id) || (twin && loadRecord(twin.id));
     if (mine && mine.savedAt && st.savedAt && mine.savedAt > st.savedAt) { kept++; return; }
     const savedAt = st.savedAt; writeRecord(st); if (savedAt) { st.savedAt = savedAt; lsWrite(recordKey(st.id), JSON.stringify(st)); }
+    if (twin) { try { localStorage.removeItem(recordKey(twin.id)); } catch (_) {} writeIndex(readIndex().filter(e => e.id !== twin.id)); if (S.id === twin.id) S = st; }
     if (mine) updated++; else added++;
   });
   Object.entries(data.rates || {}).forEach(([y, r]) => { if (!customRates[y]) customRates[y] = r; }); saveRates();
