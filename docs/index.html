@@ -2856,7 +2856,8 @@ $('#mtAddMiles').onclick = () => {
 // Extraction Tool opens in a new tab on the same client; its "Send to Year
 // End Tool" button leaves the coded lines in shared storage, and they show
 // here (straight away, through the storage event) to add to the workings.
-const EXTRACTION_URL = '../ExtractionTool/';
+// On the firm's Portal the tools live at /portal-tools/<name>/; on GitHub Pages, in each repository's folder.
+const EXTRACTION_URL = /\/portal-tools\//.test(location.pathname) ? '../extraction/' : '../ExtractionTool/';
 const INBOX_KEY = 'yearEnd:inbox';
 function renderExtraction() {
   const name = S.client.name || '';
